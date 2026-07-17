@@ -23,6 +23,26 @@ export async function copyDirectory(sourceDir: string, destinationDir: string): 
   await cp(sourceDir, destinationDir, { recursive: true });
 }
 
+/**
+ * Copy a directory tree only if the source exists. Returns whether it copied.
+ * Useful for optional template directories (e.g. an empty `hooks/` that git
+ * doesn't track).
+ */
+export async function copyDirectoryIfExists(
+  sourceDir: string,
+  destinationDir: string
+): Promise<boolean> {
+  try {
+    await cp(sourceDir, destinationDir, { recursive: true });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** Write `contents` to `filePath`, overwriting any existing file. */
 export async function writeTextFile(filePath: string, contents: string): Promise<void> {
   await writeFile(filePath, contents, "utf8");

@@ -7,7 +7,8 @@
     "./globals.css": "./src/styles/globals.css",
     "./components/*": "./src/components/*.tsx",
     "./lib/*": "./src/lib/*.ts",
-    "./hooks/*": "./src/hooks/*.ts"
+    "./hooks/*": "./src/hooks/*.ts",
+    "./theme/*": "./src/theme/*.tsx"
   },
   "scripts": {
     "ui:add": "shadcn add",
@@ -33,6 +34,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.24.0",
+    "next-themes": "^0.4.6",
     "tailwind-merge": "^3.6.0"
   }
 }

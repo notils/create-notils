@@ -12,6 +12,9 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Sanjay Kumar Sah",
   "license": "ISC",
   "repository": {
@@ -34,7 +37,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint ."
+    "lint": "biome lint .",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.6.0",

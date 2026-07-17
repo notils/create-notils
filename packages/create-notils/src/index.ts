@@ -14,6 +14,7 @@ import {
   type ScaffoldConfig,
 } from "./config.js";
 import { replaceInDirectoryTree } from "./filesystem.js";
+import { flattenToStandalone } from "./flatten.js";
 import { initializeGitRepository } from "./git.js";
 import { resetRootMetadata } from "./metadata.js";
 import { runCommand } from "./process.js";
@@ -82,15 +83,23 @@ async function configureProject(
 ): Promise<void> {
   await stripInternalPaths(projectRoot);
 
-  // Rename the source identifier only. package.json metadata is fixed explicitly
-  // below (never via this blind rename) — see docs/issue #13.
+  // Rename the source identifier only (never package.json metadata — that is
+  // handled explicitly, see docs/issue #13). This does not touch the
+  // `@notils/ui` package scope, so it is safe to run before flatten.
   await replaceInDirectoryTree(projectRoot, [
     { find: "create-notils", replaceWith: config.projectName },
   ]);
-  await resetRootMetadata(projectRoot, { projectName: config.projectName });
 
   if (config.projectType === "monorepo") {
+    // Monorepo: reset the root metadata, then expand the template app into the
+    // requested set of apps.
+    await resetRootMetadata(projectRoot, { projectName: config.projectName });
     await generateApps(projectRoot, config.appNames, config.bundleIdentifierPrefix);
+  } else {
+    // Standalone: fold packages/ui + packages/config into a single Next app and
+    // promote it to the root. flattenToStandalone writes clean root metadata
+    // itself, so no separate resetRootMetadata is needed.
+    await flattenToStandalone(projectRoot, config.projectName);
   }
 
   await writeGeneratedReadme(projectRoot, {
