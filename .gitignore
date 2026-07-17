@@ -36,3 +36,9 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Skills: real files live in .agents/skills (tracked, tool-agnostic).
+# .claude/skills holds local junctions/symlinks back to them — git can't
+# represent junctions, so it would double-track the files. Ignore the mirror;
+# the installer/junctions regenerate it locally.
+.claude/skills/

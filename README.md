@@ -1,159 +1,206 @@
-# Turborepo starter
+# create-notils
 
-This Turborepo starter is maintained by the Turborepo core team.
+> The fastest way to bootstrap production-ready applications with sensible defaults.
 
-## Using this example
+## What is create-notils?
 
-Run the following command:
+**create-notils** is a CLI that scaffolds a complete, production-ready project instead of just generating a basic application.
 
-```sh
-npx create-turbo@latest
+It removes the repetitive work involved in setting up modern full-stack applications by providing a carefully curated starter that includes authentication, UI components, database configuration, development tooling, and project structure from day one.
+
+The goal is simple:
+
+> Spend less time configuring infrastructure and more time building products.
+
+---
+
+## Why does it exist?
+
+Every new project starts with the same repetitive tasks:
+
+- Creating a Next.js project
+- Setting up a monorepo
+- Installing Tailwind CSS
+- Configuring shadcn/ui
+- Integrating authentication
+- Creating login and registration pages
+- Setting up the database and ORM
+- Configuring environment variables
+- Setting up linting and formatting
+- Creating Docker configuration
+- Organizing folders
+- Adding CI/CD workflows
+
+Although each step is well documented, together they consume hours before real product development begins. **create-notils** automates them so developers can start building features immediately.
+
+---
+
+## Design Philosophy
+
+### Opinionated by default
+
+The first version intentionally follows a single, well-tested technology stack. Instead of asking dozens of configuration questions, it generates a project with sensible defaults so development can begin immediately. Everything lives inside your repository, so you can always modify the generated code afterward.
+
+### Production-first
+
+The generated project should resemble something ready to build upon — not a toy example. It includes the infrastructure commonly needed by modern SaaS applications.
+
+### Own your code
+
+Unlike hosted platforms or code generators that hide implementation details, every file belongs to the developer. Authentication pages, UI components, configuration, and business logic remain fully editable. There is no vendor lock-in.
+
+---
+
+## Current Stack
+
+A modern TypeScript stack built around:
+
+- **[Next.js](https://nextjs.org/) 16** — App Router, React Compiler, Turbopack
+- **[React](https://react.dev/) 19**
+- **[Turborepo](https://turborepo.dev/)** — the monorepo task runner
+- **[Bun](https://bun.sh/)** — package manager and runtime
+- **[Tailwind CSS](https://tailwindcss.com/) v4** — CSS-first, no `tailwind.config.js`
+- **[shadcn/ui](https://ui.shadcn.com/)** on **[Base UI](https://base-ui.com/)** — in a shared `@notils/ui` package
+- **[TypeScript](https://www.typescriptlang.org/)** — everywhere, `strict`
+- **[Biome](https://biomejs.dev/)** — one fast tool for linting + formatting (replaces ESLint + Prettier)
+
+Planned (see [Roadmap](#roadmap)): **Better Auth** + Better Auth UI (auth on by default), **PostgreSQL** + **Drizzle ORM**, **Docker**, and CI/CD.
+
+---
+
+## Repository Structure
+
+```
+create-notils/
+├── apps/
+│   └── app/              # Next.js 16 application (App Router)
+├── packages/
+│   ├── config/           # Shared tsconfig + Biome config (@notils/config)
+│   └── ui/               # Shared shadcn/ui component library (@notils/ui)
+├── biome.json            # Root Biome config (extends @notils/config)
+├── turbo.json            # Turborepo pipeline
+└── package.json          # Workspaces + root scripts
 ```
 
-## What's inside?
+### `@notils/ui` — the shared design system
 
-This Turborepo includes the following packages/apps:
+shadcn/ui is **not** installed per-app. It lives in a single `packages/ui` workspace that every app consumes, so there is one design system and one place to add or update components — a second app never duplicates the primitives.
 
-### Apps and Packages
+- Components live in `packages/ui/src/components/ui`.
+- The `cn()` helper lives in `packages/ui/src/lib/utils.ts`.
+- Design tokens and the Tailwind v4 theme live in `packages/ui/src/styles/globals.css`.
+- `packages/ui/components.json` configures the shadcn CLI to write into this package using the `@notils/ui/*` aliases.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+Apps import primitives directly:
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```tsx
+import { Button } from "@notils/ui/components/ui/button";
 ```
 
-Without global `turbo`, use your package manager:
+Apps pull in the shared theme by importing the package stylesheet from their own `globals.css`:
 
-```sh
-cd my-turborepo
-npx turbo build
-bun dlx turbo build
-bun exec turbo build
+```css
+@import "@notils/ui/globals.css";
+@source "../"; /* scan this app's own source for class names */
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+> **Why not `shadcn init --monorepo`?**
+> That command scaffolds shadcn's _own_ opinionated monorepo (its own app, tsconfig, and Tailwind wiring), which fights the config in this repo — it's meant for greenfield projects. Instead we wire shadcn manually into `packages/ui` so it respects our existing setup, which is the same pattern shadcn's monorepo output uses under the hood.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+> **Base UI, not Radix.**
+> Components are generated on [Base UI](https://base-ui.com/) (`components.json` → `style: "base-nova"`), shadcn's forward-looking default. Composition uses the `render` prop (with `nativeButton={false}` when rendering a non-`<button>`), not Radix's `asChild`. The unified `radix-ui` package remains fully supported by shadcn if you prefer it — switching bases is a one-command migration.
 
-```sh
-turbo build --filter=docs
+---
+
+## Getting Started
+
+Scaffold a new project:
+
+```bash
+npx create-notils my-app
+cd my-app
+bun install
+bun run dev
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+## Working with UI components
+
+Because shadcn writes source files into your repo, there is no package to bump — **adding and updating are the same command**, run from inside `packages/ui`:
+
+```bash
+cd packages/ui
+
+# add a component
+bunx shadcn@latest add dialog
+
+# preview an upstream update against your local copy
+bunx shadcn@latest add button --diff button.tsx
+
+# update (review the diff in git afterward)
+bunx shadcn@latest add button --overwrite
 ```
 
-### Develop
+Every generated file is yours to edit. Updating a component is a git diff, not a dependency upgrade.
 
-To develop all apps and packages, run the following command:
+---
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## Development
 
-```sh
-cd my-turborepo
-turbo dev
+All tasks run through Turborepo from the repo root:
+
+```bash
+bun run dev        # start all apps in dev mode
+bun run build      # build all apps and packages
+bun run typecheck  # type-check every workspace
+bun run lint       # lint via Biome
+bun run lint:fix   # lint + format and apply safe fixes
+bun run format     # format only
 ```
 
-Without global `turbo`, use your package manager:
+Target a single workspace with a Turborepo filter:
 
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
+```bash
+bun run dev --filter=app
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+---
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## Roadmap
 
-```sh
-turbo dev --filter=web
+### Phase 1 — Personal Starter
+
+A single opinionated template used to bootstrap all of my own projects. No prompts. No templates. Just one command.
+
+```bash
+npx create-notils my-app
 ```
 
-Without global `turbo`:
+### Phase 2 — Better Developer Experience
 
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
+Improve the CLI with project validation, automatic dependency installation, environment setup, Git initialization, update commands, and template versioning.
 
-### Remote Caching
+### Phase 3 — Modular Architecture
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+Extract commonly used functionality into reusable modules: Authentication, Database, Email, Storage, Payments, RBAC, AI integrations, Monitoring.
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+### Phase 4 — Community Templates
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+Support multiple project types — SaaS, AI applications, admin dashboards, APIs, landing pages, mobile, and desktop (Electron) — in both monorepo and single-package variants. This is also where [rnstack](https://github.com/sanjaysah101/rnstack) will be merged in.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+---
 
-```sh
-cd my-turborepo
-turbo login
-```
+## Long-Term Vision
 
-Without global `turbo`, use your package manager:
+The long-term goal is for **create-notils** to become the entry point into the Notils ecosystem. It will not only generate projects but also integrate seamlessly with reusable Notils packages for authentication, email, storage, developer tooling, and future infrastructure services.
 
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
+Over time, the CLI will evolve from a project generator into a platform for assembling production-ready applications from trusted building blocks.
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+---
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+## Mission
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Help developers skip repetitive setup and start building products in minutes instead of days.
 
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Infrastructure should accelerate development — not delay it.

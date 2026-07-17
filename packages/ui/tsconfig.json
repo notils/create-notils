@@ -1,0 +1,10 @@
+{
+  "extends": "@notils/config/tsconfig.react.json",
+  "compilerOptions": {
+    "paths": {
+      "@notils/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
