@@ -181,6 +181,13 @@ npx create-notils my-app
 
 Improve the CLI with project validation, automatic dependency installation, environment setup, Git initialization, update commands, and template versioning.
 
+**Two project shapes, one source.** The CLI will let you choose:
+
+- **Monorepo** — Turborepo with `apps/*` + shared `packages/*`. For larger apps, multiple apps, and shared packages.
+- **Standalone** — a single Next.js project where the UI kit and config are folded into the app's own `src/` (`@/components/ui`, `@/lib`). For landing pages, SaaS MVPs, AI apps, and dashboards.
+
+There is no duplicated template: the monorepo is the single source, and the standalone variant is derived by a deterministic flatten transform (see [`docs/cli-monorepo-vs-standalone.md`](docs/cli-monorepo-vs-standalone.md)).
+
 ### Phase 3 — Modular Architecture
 
 Extract commonly used functionality into reusable modules: Authentication, Database, Email, Storage, Payments, RBAC, AI integrations, Monitoring.

@@ -1,0 +1,51 @@
+{
+  "name": "create-notils",
+  "version": "0.1.0",
+  "description": "Scaffold a production-ready Next.js project (Turborepo + Bun + Tailwind v4 + shadcn/ui on Base UI + Biome) as a monorepo or a standalone app, in one command.",
+  "type": "module",
+  "bin": {
+    "create-notils": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "Sanjay Kumar Sah",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/notils/create-notils",
+    "directory": "packages/create-notils"
+  },
+  "keywords": [
+    "nextjs",
+    "turborepo",
+    "tailwind",
+    "shadcn",
+    "base-ui",
+    "monorepo",
+    "starter",
+    "cli",
+    "create"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ."
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.6.0",
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1",
+    "tiged": "^2.12.8"
+  },
+  "devDependencies": {
+    "@notils/config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

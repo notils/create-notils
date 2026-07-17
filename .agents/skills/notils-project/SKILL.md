@@ -154,6 +154,19 @@ Aim for a polished, production-looking default — not a toy demo.
 - **`notils-project`** (THIS skill) — the **internal dev guide** for building create-notils itself: setup decisions, CLI/scaffold roadmap, "this repo" specifics. It is NOT shipped to scaffolded apps.
 - **`app-guide`** — the **client skill shipped to the generated app**. It documents the *generated project's* conventions for end users (using the ui kit, theming, adding components, structure) and deliberately says nothing about create-notils internals, the scaffold CLI, or repo development. When you change a convention that affects generated projects (Base UI usage, theming, ui-package workflow), update **both** skills. When you change something internal-only (CLI, release process), update only `notils-project`.
 
+## Monorepo vs standalone — one source, two shapes (authoring rule)
+
+The CLI will offer two output shapes: **monorepo** (apps/* + packages/*) and **standalone** (a single Next project where the packages are folded into the app's `src/`). Full spec: [`docs/cli-monorepo-vs-standalone.md`](../../../docs/cli-monorepo-vs-standalone.md).
+
+**The decision:** the monorepo IS the single source. Standalone is *derived* by a deterministic **flatten transform** (move `packages/ui/src/*` → `src/`, inline config, rewrite `@notils/*` specifiers → `@/*`, merge the three package.json into one, emit `components.json` with `@/*` aliases). We author only the monorepo; standalone is computed, never stored. No duplicated source, no second set of boundary files.
+
+**What this constrains RIGHT NOW, while building the template:**
+- **Keep the cross-package boundary tiny and regular.** Only ever cross packages via the enumerated specifier kinds (see the boundary map in the doc): `@notils/ui/{components,lib,hooks}/*`, `@notils/ui/globals.css`, `@notils/config/*`, and `workspace:*` deps. If you add a NEW shared surface, add it to `@notils/ui`'s `exports` AND to the boundary map — never invent a new import shape the transform can't rewrite.
+- **Imports must be literal** (`import { cn } from "@notils/ui/lib/utils"`) so the specifier-aware rewrite catches them. Never build the `@notils/ui` string dynamically.
+- **`components.json` is variant-templated** — its `aliases`/`css` path differ per shape; `style`/`base`/`iconLibrary` are shared.
+- **Theme stays CSS-first + token-based**, so flatten can merge the two `globals.css` files by concatenation + `@source` fixup, not a semantic merge.
+- The safety net is a **golden build test**: CI scaffolds both variants, runs `bun install && bun run build`, and greps standalone output for any surviving `@notils/` specifier (fails if found).
+
 ## Roadmap — PLANNED, NOT YET BUILT
 
 Do not assume these files/APIs exist; if asked to use them, build them first or confirm scope.
@@ -161,6 +174,6 @@ Do not assume these files/APIs exist; if asked to use them, build them first or 
 - **`packages/auth`** — Better Auth server config + client + Better Auth UI, depending on `packages/db`. Auth pages (`/login`, `/register`) live in `apps/app` and consume `@notils/ui` primitives (keep UI and auth decoupled). Auth enabled by default is a stated goal.
 - **`packages/db`** — PostgreSQL + Drizzle ORM.
 - **Docker** config, env-var setup, CI/CD workflows.
-- **The `create-notils` CLI itself** — scaffolds this template (monorepo and, later, non-monorepo variants); this is where rnstack merges in.
+- **The `create-notils` CLI itself** (`packages/create-notils`) — scaffolds this template in **monorepo** or **standalone** shape (flatten transform + `--type` prompt + golden build test); this is where rnstack merges in. See the CLI architecture doc above.
 
 When implementing roadmap items, follow the conventions above and refresh THIS skill so it stays the accurate source of truth.

@@ -39,5 +39,5 @@
     "*.css": "postcss"
   },
   "typescript.tsdk": "node_modules\\typescript\\lib",
-  "cSpell.words": ["bunx", "lucide", "notils", "OKLCH", "rnstack", "shadcn", "sonner"]
+  "cSpell.words": ["bunx", "lucide", "notils", "OKLCH", "rnstack", "shadcn", "sonner", "turborepo"]
 }
