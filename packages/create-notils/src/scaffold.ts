@@ -15,7 +15,7 @@ import { getCommandOutput } from "./process.js";
 // for reproducible scaffolds. Bump this when cutting a new template release.
 // Override with NOTILS_TEMPLATE_REF for local testing against a branch.
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.1.0";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.1.1";
 
 /**
  * Paths inside the template that must NEVER end up in a scaffolded project.
@@ -81,22 +81,30 @@ ${run("typecheck")}
 }
 
 /**
- * Ensure the scaffold's root package.json advertises the chosen package manager
- * via `devEngines.packageManager`, so contributors are steered to the right tool.
+ * Ensure the scaffold's root package.json advertises the chosen package
+ * manager via the legacy `packageManager` field (`"<name>@<version>"`), NOT
+ * `devEngines.packageManager`.
  *
- * turbo hard-requires this field (or the legacy `packageManager` string) to
- * run at all — a monorepo scaffold without one fails with "Could not resolve
- * workspace... Missing devEngines.packageManager" the moment `turbo run dev`
- * is invoked. And unlike npm's own devEngines check, turbo's parser rejects
- * a name-only entry ("devEngines.packageManager.version is required"), so a
- * real version is mandatory whenever this field is written at all.
+ * turbo hard-requires ONE of these two fields to run at all — a monorepo
+ * scaffold with neither fails with "Could not resolve workspace... Missing
+ * devEngines.packageManager or legacy packageManager field" the moment
+ * `turbo run dev` is invoked. But `devEngines` triggers strict runtime
+ * enforcement (by npm, bun, and turbo's own stricter parser, which also
+ * rejects a wildcard "*" version outright) that the legacy field does not —
+ * and that enforcement is genuinely fragile: the same manager name can
+ * resolve to a *different* binary/version depending on invocation context
+ * (confirmed by testing — turbo's own internal subprocess for a workspace
+ * member's `npm run dev` resolved to the Node-bundled npm, a different
+ * *major* version than the separately-upgraded global npm on PATH; the
+ * template's own hardcoded bun pin has the identical latent risk for any
+ * user whose bun differs from that exact version). The legacy field
+ * satisfies turbo's structural requirement without triggering that
+ * enforcement (verified: turbo ran the dev server successfully with it
+ * despite that same version mismatch breaking devEngines outright).
  *
- * The template only has one legitimate version to carry over: bun's own pin.
- * For any other manager there's nothing safe to reuse — hardcoding some
- * other version would either be wrong or, worse, force-pin a version the
- * user doesn't have. So for a non-bun manager, detect the version actually
- * installed on this machine (`<manager> --version`) — it's the same tool
- * about to run `install`/`dev` anyway, so this is both accurate and free.
+ * Still detect a real version rather than fabricate one — harmless if wrong
+ * for most users, but accurate for anyone with Corepack actively enabled
+ * (Corepack reads this exact field to select/download the pinned version).
  */
 export async function alignPackageManagerField(
   projectRoot: string,
@@ -104,38 +112,25 @@ export async function alignPackageManagerField(
 ): Promise<void> {
   const packageJsonPath = join(projectRoot, "package.json");
   const packageJson = await readJsonFile<Record<string, unknown>>(packageJsonPath);
-  const existing = packageJson.devEngines as
-    | { packageManager?: { name?: string; version?: string } }
-    | undefined;
+  delete packageJson.devEngines;
 
   // Detect from a neutral directory, NOT projectRoot: at this point the
   // scaffold's package.json still carries the template's original
-  // `devEngines: bun` pin (this function is what overwrites it, further
-  // down) — pnpm/npm/bun each enforce that pin themselves when invoked
-  // inside a directory that declares it, so running `<manager> --version`
-  // from inside the scaffold can itself fail for an unrelated reason.
-  const version =
-    packageManager === "bun"
-      ? existing?.packageManager?.version
-      : await getCommandOutput(packageManager, ["--version"], {
-          workingDirectory: tmpdir(),
-          useShell: process.platform === "win32",
-        });
+  // `devEngines: bun` pin (removed above, but not yet on disk) — pnpm/npm/bun
+  // each enforce that pin themselves when invoked inside a directory that
+  // declares it, so running `<manager> --version` from inside the scaffold
+  // can itself fail for an unrelated reason.
+  const version = await getCommandOutput(packageManager, ["--version"], {
+    workingDirectory: tmpdir(),
+    useShell: process.platform === "win32",
+  });
 
-  if (!version) {
-    // Couldn't determine a real version for the chosen manager (not
-    // installed on this machine) — remove the stale bun-specific pin rather
-    // than leave a wrong or unparseable devEngines behind; turbo's own error
-    // message is a clearer signal than a misleading one.
-    delete packageJson.devEngines;
-    await writeJsonFile(packageJsonPath, packageJson);
-    return;
+  if (version) {
+    packageJson.packageManager = `${packageManager}@${version}`;
+  } else {
+    delete packageJson.packageManager;
   }
 
-  packageJson.devEngines = {
-    ...existing,
-    packageManager: { name: packageManager, version },
-  };
   await writeJsonFile(packageJsonPath, packageJson);
 }
 
@@ -194,4 +189,29 @@ export async function configurePnpmWorkspace(
 
   const yaml = `packages:\n${workspaces.map((glob) => `  - "${glob}"`).join("\n")}\n`;
   await writeTextFile(join(projectRoot, "pnpm-workspace.yaml"), yaml);
+}
+
+/**
+ * The `workspace:*` version protocol (every internal `@notils/*` dependency
+ * in the template) is bun/pnpm/Yarn-Berry syntax — npm has never supported
+ * it, and Yarn Classic (1.x, still what a bare `yarn` resolves to almost
+ * everywhere by default) doesn't either. Either one fails `install` outright
+ * with `EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"` on *every*
+ * monorepo scaffold — this isn't an edge case, npm/yarn monorepos are simply
+ * broken without this fix.
+ *
+ * The portable fix is a plain `"*"` range: both npm and Yarn (1.x and 2+)
+ * resolve a same-named workspace member automatically for a satisfying
+ * range, with no special protocol needed. Standalone never has this
+ * specifier at all (flatten.ts drops every workspace dep), so this is a
+ * no-op there regardless of manager.
+ */
+export async function normalizeWorkspaceProtocol(
+  projectRoot: string,
+  packageManager: PackageManager
+): Promise<void> {
+  if (packageManager !== "npm" && packageManager !== "yarn") {
+    return;
+  }
+  await replaceInDirectoryTree(projectRoot, [{ find: '"workspace:*"', replaceWith: '"*"' }]);
 }

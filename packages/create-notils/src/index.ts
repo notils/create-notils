@@ -24,6 +24,7 @@ import {
   alignPackageManagerField,
   configurePnpmWorkspace,
   configurePreCommitHook,
+  normalizeWorkspaceProtocol,
   removeBunArtifacts,
   stripInternalPaths,
   TEMPLATE_REF,
@@ -126,6 +127,7 @@ async function configureProject(
   await alignPackageManagerField(projectRoot, config.packageManager);
   await removeBunArtifacts(projectRoot, config.packageManager);
   await configurePnpmWorkspace(projectRoot, config.packageManager);
+  await normalizeWorkspaceProtocol(projectRoot, config.packageManager);
   await configurePreCommitHook(projectRoot, config.packageManager);
 }
 
