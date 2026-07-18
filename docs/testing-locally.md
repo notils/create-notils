@@ -142,8 +142,8 @@ Inspect what would ship **without** installing:
 npm pack --dry-run             # lists every file included in the tarball
 ```
 
-Make sure only `dist/` (and `package.json` / `README.md`) are listed — never
-`src/`, tests, or scratch files.
+Make sure only `dist/` (and `package.json` / `README.md` / `CHANGELOG.md`) are
+listed — never `src/`, tests, or scratch files.
 
 ## 5. Verify a scaffolded project actually works
 
@@ -201,9 +201,9 @@ console errors. Ctrl+C stops the dev server(s).
 
 ## Publishing to npm
 
-The package publishes only `dist/` + `package.json` + `README.md` (the `files`
-allowlist), is marked `publishConfig.access: public`, and rebuilds via
-`prepublishOnly`.
+The package publishes only `dist/` + `package.json` + `README.md` +
+`CHANGELOG.md` (the `files` allowlist), is marked `publishConfig.access:
+public`, and rebuilds via `prepublishOnly`.
 
 ```sh
 cd packages/create-notils
@@ -224,7 +224,7 @@ npm publish
 > Isolated publish (works around the workspace root):
 > ```sh
 > cd packages/create-notils && bun run build
-> tmp=$(mktemp -d) && cp -r package.json README.md dist "$tmp"/ && cd "$tmp"
+> tmp=$(mktemp -d) && cp -r package.json README.md CHANGELOG.md dist "$tmp"/ && cd "$tmp"
 > npm pack                       # sanity-check contents
 > npm publish ./create-notils-*.tgz
 > ```

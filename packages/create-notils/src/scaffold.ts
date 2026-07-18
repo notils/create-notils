@@ -13,7 +13,7 @@ import {
 // for reproducible scaffolds. Bump this when cutting a new template release.
 // Override with NOTILS_TEMPLATE_REF for local testing against a branch.
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "main";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.1.0";
 
 /**
  * Paths inside the template that must NEVER end up in a scaffolded project.
