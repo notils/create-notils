@@ -196,15 +196,52 @@ before touching `packages/create-notils/src/*`:
   rewrite depends on the literal string, so the scope-rename step must stay
   monorepo-only (running it first would break flatten's hardcoded match).
 - **Package-manager fixups** (`scaffold.ts`), applied after the flatten/apps
-  step, for every manager EXCEPT the one already baked into the template:
+  step, for every manager EXCEPT the one already baked into the template.
+  Getting these right requires actually running `<pm> install` + `<pm> dev`
+  end-to-end for **every** supported manager — checking devEngines field
+  values alone (as the first pass at this did) misses real breakage,
+  because npm/yarn monorepos turned out to be completely broken in ways
+  that never surfaced from bun/pnpm testing alone:
   - `removeBunArtifacts`: the template's Next.js scripts hardcode
     `bun run --bun next dev/build/start` (a bun-only runtime flag) and ship
     `bun.lock`. For any non-bun manager, strip the `bun run --bun ` prefix
     tree-wide and delete `bun.lock` — otherwise the scaffold's `dev`/`build`
     scripts invoke bun regardless of the chosen manager.
-  - `alignPackageManagerField`: only keep the pinned `devEngines.packageManager.version`
-    (bun's exact version) when bun is still the chosen manager — carrying it
-    into e.g. a pnpm scaffold asserts a nonsensical pin.
+  - `normalizeWorkspaceProtocol`: every internal dependency uses
+    `workspace:*` (bun/pnpm/Yarn-Berry syntax). npm has never supported it
+    and Yarn Classic (1.x — still what a bare `yarn` resolves to almost
+    everywhere) doesn't either: `npm install` failed outright with
+    `EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"` on *every*
+    npm/yarn monorepo scaffold. Fixed by rewriting `workspace:*` → `*` for
+    npm/yarn only (both resolve a same-named workspace member automatically
+    for a satisfying range); bun/pnpm keep `workspace:*`.
+  - `alignPackageManagerField`: writes the legacy `packageManager` field
+    (`"<name>@<version>"`), **not** `devEngines.packageManager` — a
+    deliberate reversal from the first attempt at this fix. turbo requires
+    one of the two to run at all, but `devEngines` triggers strict runtime
+    version enforcement (by npm, bun, and turbo's own parser, which also
+    rejects a wildcard `"*"` version outright with "must only allow
+    versions within one major version") that's fragile in a way that isn't
+    obvious until it breaks: the same manager name can resolve to a
+    *different* binary/version depending on invocation context — confirmed
+    by testing, where turbo's own internal subprocess for a workspace
+    member's `npm run dev` resolved to the Node-bundled npm, a different
+    *major* version than the separately-upgraded global npm on PATH that a
+    version-detection step found. No single version/range can satisfy both
+    on a machine in that state. The legacy `packageManager` field satisfies
+    turbo's structural requirement without triggering that enforcement
+    (verified: turbo ran the dev server successfully with it despite that
+    exact mismatch). Still detect the real installed version
+    (`getCommandOutput` in `process.ts`, from `os.tmpdir()` — NOT the
+    scaffold root, since at this point the scaffold's package.json still
+    carries the template's own `devEngines: bun` pin, and pnpm/npm/bun each
+    enforce that pin themselves when invoked inside a directory that
+    declares it) rather than fabricate one: harmless if wrong for most
+    users, but accurate for anyone with Corepack actively enabled (Corepack
+    reads this exact field). This also fixed a latent identical risk in the
+    template's own hardcoded bun pin, for any user whose bun differs from
+    that exact version — untested until this point because the dev machine
+    happened to have a matching bun version.
   - `configurePnpmWorkspace`: pnpm does not read package.json's `workspaces`
     field (npm/yarn/bun convention) — without a generated `pnpm-workspace.yaml`,
     pnpm can't see `apps/*`/`packages/*` and every `workspace:*` dep fails to
@@ -218,13 +255,25 @@ before touching `packages/create-notils/src/*`:
     the user's manual step — it's pnpm's own version-proof mechanism for
     exactly this. The rest of the install (deps, workspace linking, husky
     hook) succeeds regardless; only the optional native build is skipped.
+    npm has its own equivalent (`npm warn install-scripts ... blocked`),
+    but it's a warning, not a failing exit code, unlike pnpm's.
+  - When testing yarn locally without it globally installed: `corepack yarn
+    <args>` runs it on demand (Yarn Classic 1.x by default). If `corepack
+    enable` fails with `EPERM` (no admin rights to link shims into the
+    Node.js install dir), a `yarn.cmd` wrapper script (`@echo off` +
+    `corepack yarn %*`) dropped into the user npm global bin dir
+    (`%APPDATA%\npm`, already on PATH) works as a throwaway substitute —
+    `node.exe`'s own spawn (via `shell:true`/cmd.exe) resolves bare `yarn` to
+    `yarn.cmd` through `PATHEXT`, matching what the actual CLI does at
+    runtime (bash's own command resolution doesn't, which only matters for
+    testing directly in bash, not for the CLI itself).
 
 ### Releasing a new CLI version to npm
 
 Full mechanical steps are in
 [docs/testing-locally.md](../../../docs/testing-locally.md)'s "Publishing to
-npm" section — follow that. Additional things learned cutting v0.1.0, not to
-re-discover:
+npm" section — follow that. Additional things learned cutting v0.1.0/v0.1.1,
+not to re-discover:
 
 1. **Publish with `bun publish`, directly from `packages/create-notils` — not
    `npm publish`.** The repo root pins `devEngines.packageManager: bun`, so
@@ -265,6 +314,17 @@ re-discover:
    Requires `gh` installed and authenticated (`gh auth login`) — if
    unavailable, do the git tag step above regardless and hand the notes file
    to whoever creates the Release manually.
+7. **Before publishing any "fixed the scaffold" release, verify the fix
+   against every supported package manager, not just the one that surfaced
+   the bug.** v0.1.1 started as a pnpm-only devEngines fix; testing it
+   against npm and yarn too (only because asked) surfaced that npm/yarn
+   monorepos were *completely* broken (`workspace:*` protocol unsupported)
+   in a way pnpm/bun testing could never reveal, plus a second devEngines
+   issue specific to environments with multiple resolvable versions of the
+   same manager. "Verify" means actually running `<pm> install` and `<pm>
+   dev`/`<pm> run dev` end-to-end and confirming the dev server boots —
+   checking a config field's value (e.g. `devEngines`) is not enough; it
+   caught neither bug here.
 
 ## Roadmap — PLANNED, NOT YET BUILT
 
