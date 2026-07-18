@@ -25,4 +25,4 @@ Initial release.
   scaffold's scripts, lockfile, and `devEngines` field match the chosen
   manager; a pnpm scaffold gets its own `pnpm-workspace.yaml` since pnpm
   doesn't read package.json's `workspaces` field.
-- `npm pack` ships only `dist/` + `package.json` + `README.md`.
+- `npm pack` ships only `dist/` + `package.json` + `README.md` + `CHANGELOG.md`.
