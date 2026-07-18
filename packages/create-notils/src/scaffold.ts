@@ -1,7 +1,13 @@
 import { join } from "node:path";
 
 import type { PackageManager } from "./config.js";
-import { readJsonFile, removePath, writeJsonFile, writeTextFile } from "./filesystem.js";
+import {
+  readJsonFile,
+  removePath,
+  replaceInDirectoryTree,
+  writeJsonFile,
+  writeTextFile,
+} from "./filesystem.js";
 
 // The template is the create-notils repository itself, pinned to a release tag
 // for reproducible scaffolds. Bump this when cutting a new template release.
@@ -87,9 +93,71 @@ export async function alignPackageManagerField(
     | { packageManager?: { name?: string; version?: string } }
     | undefined;
 
+  // The template pins an exact bun version. That pin has no relation to any
+  // other manager's version, so only keep it when bun is still the chosen
+  // manager — otherwise it would assert a nonsensical pin (e.g. pnpm@1.3.14).
+  const version = packageManager === "bun" ? existing?.packageManager?.version : undefined;
+
   packageJson.devEngines = {
     ...existing,
-    packageManager: { ...existing?.packageManager, name: packageManager },
+    packageManager: version ? { name: packageManager, version } : { name: packageManager },
   };
   await writeJsonFile(packageJsonPath, packageJson);
+}
+
+/**
+ * The template's Next.js scripts run through `bun run --bun`, a bun-only
+ * runtime flag that breaks under any other package manager (it invokes bun
+ * regardless of what was chosen). It also ships its own `bun.lock`. Both are
+ * fine to leave when bun is the chosen manager; otherwise strip the prefix
+ * (leaving plain `next dev` / `next build` / `next start`) and drop the stale
+ * lockfile so install generates the right one.
+ */
+export async function removeBunArtifacts(
+  projectRoot: string,
+  packageManager: PackageManager
+): Promise<void> {
+  if (packageManager === "bun") {
+    return;
+  }
+  await replaceInDirectoryTree(projectRoot, [{ find: "bun run --bun ", replaceWith: "" }]);
+  await removePath(join(projectRoot, "bun.lock"));
+}
+
+/**
+ * pnpm does not read the package.json `workspaces` field — that's npm/yarn/bun
+ * convention. Without a `pnpm-workspace.yaml`, pnpm can't see `apps/*` /
+ * `packages/*` as workspace members at all, so every `workspace:*` dependency
+ * fails to resolve and `pnpm install` hard-errors. A no-op for a standalone
+ * scaffold (no `workspaces` field) or any manager other than pnpm.
+ *
+ * Deliberately NOT handled here: pnpm also skips a dependency's native
+ * build/postinstall script (e.g. sharp's) unless explicitly allow-listed,
+ * which makes `pnpm install` exit non-zero even though the rest of the
+ * install succeeded. The allow-list's config key has already changed once
+ * across pnpm major versions (`onlyBuiltDependencies` in v10, `allowBuilds` in
+ * v11) with no forwards compatibility, so hardcoding either schema into the
+ * template risks silently breaking again on a future pnpm release. That's
+ * exactly the scenario pnpm's own `pnpm approve-builds` exists for — it's
+ * stable across pnpm's internal config churn, so it's left as a manual step.
+ */
+export async function configurePnpmWorkspace(
+  projectRoot: string,
+  packageManager: PackageManager
+): Promise<void> {
+  if (packageManager !== "pnpm") {
+    return;
+  }
+  const packageJsonPath = join(projectRoot, "package.json");
+  const packageJson = await readJsonFile<Record<string, unknown>>(packageJsonPath);
+  const workspaces = packageJson.workspaces as string[] | undefined;
+  if (!workspaces) {
+    return;
+  }
+
+  delete packageJson.workspaces;
+  await writeJsonFile(packageJsonPath, packageJson);
+
+  const yaml = `packages:\n${workspaces.map((glob) => `  - "${glob}"`).join("\n")}\n`;
+  await writeTextFile(join(projectRoot, "pnpm-workspace.yaml"), yaml);
 }

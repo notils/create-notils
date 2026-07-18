@@ -22,7 +22,9 @@ import { runCommand } from "./process.js";
 import { writeGeneratedReadme } from "./readme.js";
 import {
   alignPackageManagerField,
+  configurePnpmWorkspace,
   configurePreCommitHook,
+  removeBunArtifacts,
   stripInternalPaths,
   TEMPLATE_REF,
   TEMPLATE_REPOSITORY,
@@ -96,6 +98,17 @@ async function configureProject(
     // requested set of apps.
     await resetRootMetadata(projectRoot, { projectName: config.projectName });
     await generateApps(projectRoot, config.appNames);
+
+    // The internal workspace packages (packages/ui, packages/config) keep the
+    // `@notils/*` scope otherwise — rename it to the project's own scope, across
+    // package names, workspace deps, tsconfig/biome `extends`, path aliases, and
+    // source imports. Standalone doesn't need this: flattenToStandalone already
+    // strips the `@notils/ui` scope entirely, and its rewrite depends on that
+    // literal string, so this must run only here, after generateApps has copied
+    // every requested app.
+    await replaceInDirectoryTree(projectRoot, [
+      { find: "@notils/", replaceWith: `@${config.projectName}/` },
+    ]);
   } else {
     // Standalone: fold packages/ui + packages/config into a single Next app and
     // promote it to the root. flattenToStandalone writes clean root metadata
@@ -111,6 +124,8 @@ async function configureProject(
   });
 
   await alignPackageManagerField(projectRoot, config.packageManager);
+  await removeBunArtifacts(projectRoot, config.packageManager);
+  await configurePnpmWorkspace(projectRoot, config.packageManager);
   await configurePreCommitHook(projectRoot, config.packageManager);
 }
 
