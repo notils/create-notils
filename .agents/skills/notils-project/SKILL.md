@@ -5,11 +5,11 @@ description: Architecture, conventions, and setup decisions for the create-notil
 
 # create-notils — project guide
 
-**create-notils** is an opinionated, production-first monorepo starter and (eventually) a CLI that scaffolds a complete full-stack app in one command: `npx create-notils my-app`. The goal is that a developer skips the repetitive infra setup (monorepo, UI kit, auth, db, tooling) and starts building product on day one. Every generated file is the user's to edit — no vendor lock-in.
+**create-notils** is an opinionated, production-first monorepo starter and a CLI (published to npm, see "The `create-notils` CLI" below) that scaffolds a complete full-stack app in one command: `npm create notils@latest my-app`. The goal is that a developer skips the repetitive infra setup (monorepo, UI kit, auth, db, tooling) and starts building product on day one. Every generated file is the user's to edit — no vendor lock-in.
 
 > Branding: the product/package name is **create-notils** (root `package.json` `name: "create-notils"`; part of the future **Notils** ecosystem). [rnstack](https://github.com/sanjaysah101/rnstack) (a React Native starter) will be merged in later as a template variant — keep conventions here compatible with that skill (`rnstack-project`).
 
-Primary target is **web (Next.js)**. The stack is deliberately singular and well-tested — no configuration prompts in the current phase.
+Primary target is **web (Next.js)**. The stack itself (Next.js/Tailwind/shadcn/Base UI/Biome) is deliberately singular and well-tested — no stack-choice prompts. The CLI does prompt for scaffold shape (monorepo/standalone), app names, and package manager (see "The `create-notils` CLI" below).
 
 ## Repository layout
 
@@ -167,6 +167,106 @@ The CLI will offer two output shapes: **monorepo** (apps/* + packages/*) and **s
 - **Theme stays CSS-first + token-based**, so flatten can merge the two `globals.css` files by concatenation + `@source` fixup, not a semantic merge.
 - The safety net is a **golden build test**: CI scaffolds both variants, runs `bun install && bun run build`, and greps standalone output for any surviving `@notils/` specifier (fails if found).
 
+## The `create-notils` CLI (`packages/create-notils`) — BUILT and published
+
+The CLI (scaffolds this template in **monorepo** or **standalone** shape, via
+the flatten transform described above) is built and published to npm as
+`create-notils`, first release **v0.1.0**. Local dev/testing loop is documented
+in [docs/testing-locally.md](../../../docs/testing-locally.md) — read that
+before changing CLI source or cutting a release.
+
+Since the initial build, these CLI behaviors were added/fixed — know them
+before touching `packages/create-notils/src/*`:
+
+- **Project name prompt**: empty Enter defaults to `my-app`
+  (`DEFAULT_PROJECT_NAME` in `arguments.ts`); `.` scaffolds into the current
+  directory (only if empty — aborts otherwise), deriving the name from the
+  folder via `toValidProjectName` (sanitizes, falls back to `my-app`).
+- **No `--bundle-id-prefix` flag/prompt.** It was reserved for a future
+  React Native target and had zero effect on the web-only CLI — removed
+  end-to-end (cli.ts, config.ts, arguments.ts, apps.ts, README). Re-add it
+  (and wire it up for real) only when an RN app target actually exists.
+- **Monorepo workspace-scope rename**: `packages/ui`/`packages/config` keep
+  the `@notils/*` scope in the template, but a monorepo scaffold renames it to
+  `@<project-name>/*` everywhere (package names, workspace deps, tsconfig
+  `extends`/`paths`, `biome.json` extends, `components.json` aliases, source
+  imports) — see `index.ts`'s `configureProject`, which runs this via
+  `replaceInDirectoryTree` right after `generateApps`. Standalone doesn't need
+  it: `flatten.ts` already strips the `@notils/ui` scope entirely, and that
+  rewrite depends on the literal string, so the scope-rename step must stay
+  monorepo-only (running it first would break flatten's hardcoded match).
+- **Package-manager fixups** (`scaffold.ts`), applied after the flatten/apps
+  step, for every manager EXCEPT the one already baked into the template:
+  - `removeBunArtifacts`: the template's Next.js scripts hardcode
+    `bun run --bun next dev/build/start` (a bun-only runtime flag) and ship
+    `bun.lock`. For any non-bun manager, strip the `bun run --bun ` prefix
+    tree-wide and delete `bun.lock` — otherwise the scaffold's `dev`/`build`
+    scripts invoke bun regardless of the chosen manager.
+  - `alignPackageManagerField`: only keep the pinned `devEngines.packageManager.version`
+    (bun's exact version) when bun is still the chosen manager — carrying it
+    into e.g. a pnpm scaffold asserts a nonsensical pin.
+  - `configurePnpmWorkspace`: pnpm does not read package.json's `workspaces`
+    field (npm/yarn/bun convention) — without a generated `pnpm-workspace.yaml`,
+    pnpm can't see `apps/*`/`packages/*` and every `workspace:*` dep fails to
+    resolve. **Deliberately NOT handled**: pnpm's `ERR_PNPM_IGNORED_BUILDS`
+    (it refuses to run a dependency's native postinstall — e.g. sharp's —
+    unless allow-listed). The allow-list config key already changed once
+    across pnpm majors (`onlyBuiltDependencies` in v10 → `allowBuilds` in
+    v11) with no compatibility overlap; hardcoding either schema into the
+    template risks silently breaking again on a future pnpm release (this was
+    tried and empirically failed on pnpm 11). Leave `pnpm approve-builds` as
+    the user's manual step — it's pnpm's own version-proof mechanism for
+    exactly this. The rest of the install (deps, workspace linking, husky
+    hook) succeeds regardless; only the optional native build is skipped.
+
+### Releasing a new CLI version to npm
+
+Full mechanical steps (build, isolated-dir workaround, `npm pack --dry-run`
+checklist) are in
+[docs/testing-locally.md](../../../docs/testing-locally.md)'s "Publishing to
+npm" section — follow that. Additional things learned cutting v0.1.0, not to
+re-discover:
+
+1. **`CHANGELOG.md` needs an explicit `files` entry.** npm's "always
+   included regardless of `files`" set is `package.json`/`README`/`LICENSE` —
+   **not** `CHANGELOG.md`. Confirmed via `npm pack --dry-run`: without adding
+   `"CHANGELOG.md"` to `package.json`'s `files` array, it silently doesn't
+   ship even though it sits right next to `README.md`.
+2. **Pin `TEMPLATE_REF`** (`src/scaffold.ts`) to the tag being cut (e.g.
+   `"v0.1.0"`), not left floating on `"main"` — the template IS this repo, so
+   the tag doubles as both the npm release marker and the frozen template
+   snapshot `tiged` fetches. **Verify it resolves** before publishing: after
+   pushing the tag, scaffold a test project with the freshly-built CLI and
+   confirm the fetch step shows `notils/create-notils#v<version>` succeeding
+   (catches a typo'd or unpushed tag before it's public).
+3. **Publish via an explicit tarball path, never bare `npm publish`, from the
+   isolated dir.** `npm publish ./create-notils-*.tgz` skips lifecycle
+   scripts entirely and is clean. Bare `npm publish` (or even
+   `npm publish --ignore-scripts`) run *inside* the isolated copy instead
+   triggers `prepublishOnly` (`bun run build`), which fails there —
+   `tsup` isn't installed in that directory (no `node_modules`, since only
+   `package.json`/`README.md`/`CHANGELOG.md`/`dist` were copied over) — and
+   npm's own error-recovery path when a lifecycle script fails mid-publish
+   can print a spurious `"bin[...]" was invalid and removed` warning that
+   looks alarming but doesn't reflect the actual tarball (verified with
+   `npm pack --dry-run` immediately after: `bin` was intact).
+4. **Tag with the full release notes, not a one-liner** —
+   `git tag -a vX.Y.Z -F <notes-file>` (or `-m`), where the notes are (at
+   minimum) that version's `CHANGELOG.md` section. A short annotation message
+   is the easy mistake; fixing it after push means `git tag -f` + force-push
+   the tag (safe only because nothing else could have fetched it yet).
+5. **Also create a GitHub Release** (`gh release create vX.Y.Z --notes-file
+   <notes-file>`, or the GitHub web UI) — separate from the git tag's own
+   annotation; that's what actually renders on the repo's Releases page.
+   Requires `gh` installed and authenticated (`gh auth login`) — if
+   unavailable, do the git tag step above regardless and hand the notes file
+   to whoever creates the Release manually.
+6. **`npm login` cannot run non-interactively** (browser/OTP flow) — verify
+   auth first with `npm whoami` (run from *outside* the workspace, or it
+   hits the same `EBADDEVENGINES` gate as any other npm command here); if it
+   fails with `ENEEDAUTH`, that's a hard stop until the user logs in
+   themselves.
+
 ## Roadmap — PLANNED, NOT YET BUILT
 
 Do not assume these files/APIs exist; if asked to use them, build them first or confirm scope.
@@ -174,6 +274,6 @@ Do not assume these files/APIs exist; if asked to use them, build them first or 
 - **`packages/auth`** — Better Auth server config + client + Better Auth UI, depending on `packages/db`. Auth pages (`/login`, `/register`) live in `apps/app` and consume `@notils/ui` primitives (keep UI and auth decoupled). Auth enabled by default is a stated goal.
 - **`packages/db`** — PostgreSQL + Drizzle ORM.
 - **Docker** config, env-var setup, CI/CD workflows.
-- **The `create-notils` CLI itself** (`packages/create-notils`) — scaffolds this template in **monorepo** or **standalone** shape (flatten transform + `--type` prompt + golden build test); this is where rnstack merges in. See the CLI architecture doc above.
+- **rnstack merge** — [rnstack](https://github.com/sanjaysah101/rnstack) (a React Native starter) as a second template variant alongside the Next.js one, consuming the same CLI. This is also when a real `--bundle-id-prefix`-equivalent prompt would come back (native reverse-DNS identifiers), scoped to that target.
 
 When implementing roadmap items, follow the conventions above and refresh THIS skill so it stays the accurate source of truth.
