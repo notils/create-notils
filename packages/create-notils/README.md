@@ -57,7 +57,6 @@ npm create notils@latest shop -- --type monorepo --apps admin,storefront -y
 | `-t, --type <type>` | `monorepo` \| `standalone` | prompted (monorepo) |
 | `--apps <names>` | Comma-separated app names (monorepo) | `web` |
 | `--pm <manager>` | `bun` \| `pnpm` \| `npm` \| `yarn` | `bun` |
-| `--bundle-id-prefix <prefix>` | Reverse-DNS prefix for future native ids | `com.<project>` |
 | `--install` / `--no-install` | Install dependencies after scaffolding | prompted (yes) |
 | `--git` / `--no-git` | Initialize a git repository | yes |
 | `-y, --yes` | Accept all defaults without prompting | — |

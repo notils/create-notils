@@ -16,8 +16,6 @@ export type CliOptions = {
   apps?: string;
   /** "bun" | "pnpm" | "npm" | "yarn" — validated downstream. */
   pm?: string;
-  /** Reverse-DNS prefix for native identifiers. */
-  bundleIdPrefix?: string;
   /** `--install` / `--no-install`. Undefined when unspecified. */
   install?: boolean;
   /** `--git` / `--no-git`. Undefined when unspecified. */
@@ -48,7 +46,6 @@ export function buildProgram(cliVersion: string): Command {
     .option("-t, --type <type>", "project shape: monorepo | standalone")
     .option("--apps <names>", "comma-separated app names under apps/ (monorepo)")
     .option("--pm <manager>", "package manager: bun | pnpm | npm | yarn")
-    .option("--bundle-id-prefix <prefix>", "reverse-DNS prefix for native ids, e.g. com.acme")
     .option("--install", "install dependencies after scaffolding")
     .option("--no-install", "skip installing dependencies")
     .option("--git", "initialize a git repository (default)")

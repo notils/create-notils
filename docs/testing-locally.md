@@ -102,11 +102,25 @@ cd packages/create-notils
 bun run build
 bun link                       # registers the bin globally
 cd /tmp
-bun link create-notils         # or just run the linked bin:
-create-notils my-app --type monorepo --apps web -y
+bun link create-notils         # installs it into THIS dir's node_modules
+bunx create-notils my-app --type monorepo --apps web -y
 ```
 
+`bun link create-notils` does not put the binary on your global PATH — it
+adds a `create-notils` shim under this directory's `node_modules/.bin`. Run it
+via `bunx` (or `./node_modules/.bin/create-notils` directly); a bare
+`create-notils` will not resolve, especially in PowerShell.
+
 Unlink when done: `bun unlink` (in the package dir).
+
+> ⚠️ **Must run from truly outside the repo, not a subfolder of it (e.g.
+> `temp/`).** The workspace root `package.json` is itself named
+> `create-notils`. If you `bun link create-notils` from any directory that
+> still has this repo's root `package.json` as an ancestor (bun walks up
+> looking for one), bun resolves that name to the workspace root itself and
+> fails with `DependencyLoop`. Use a folder with no ancestor `package.json`
+> from this repo — e.g. `$env:TEMP` (Windows) or `~/scratch`, not
+> `create-notils/temp`.
 
 ## 4. Test the exact npm tarball (`npm pack`)
 
@@ -154,6 +168,27 @@ grep -rn "@notils/" src *.json --include="*.ts" --include="*.tsx" --include="*.c
 bunx shadcn@latest add badge --dry-run --yes   # → src/components/ui/badge.tsx
 ```
 
+## 6. View it running in a browser
+
+The checks in step 5 (typecheck, build) confirm correctness but not what the
+app actually looks like. To see it for real:
+
+```sh
+cd my-app                     # the directory you scaffolded in step 2
+bun install                   # skip if step 5 already ran it
+bun dev
+```
+
+- **Standalone**: opens on http://localhost:3000.
+- **Monorepo**: `bun dev` runs `turbo run dev`, which starts every app under
+  `apps/*` in parallel on sequential ports — the first app (e.g. `web`) on
+  3000, the next (e.g. `admin`) on 3001, and so on. The terminal output shows
+  each app's URL; you can also check `apps/<name>/package.json`'s `dev`
+  script for its exact `--port`.
+
+Visit the printed URL(s) and confirm the starter homepage renders with no
+console errors. Ctrl+C stops the dev server(s).
+
 ## Quick end-to-end checklist
 
 - [ ] `bun run build` succeeds in `packages/create-notils`
@@ -162,6 +197,7 @@ bunx shadcn@latest add badge --dry-run --yes   # → src/components/ui/badge.tsx
 - [ ] Standalone scaffold: `src/{app,components/ui,lib}`, no `apps/`/`packages/`/`turbo.json`, installs + builds
 - [ ] No `@notils/` in standalone imports or dependencies
 - [ ] `npm pack --dry-run` ships only `dist/` + metadata
+- [ ] `bun dev` starts and the homepage renders in the browser with no console errors
 
 ## Publishing to npm
 

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cancel, intro, log, note, outro, spinner } from "@clack/prompts";
@@ -94,7 +95,7 @@ async function configureProject(
     // Monorepo: reset the root metadata, then expand the template app into the
     // requested set of apps.
     await resetRootMetadata(projectRoot, { projectName: config.projectName });
-    await generateApps(projectRoot, config.appNames, config.bundleIdentifierPrefix);
+    await generateApps(projectRoot, config.appNames);
   } else {
     // Standalone: fold packages/ui + packages/config into a single Next app and
     // promote it to the root. flattenToStandalone writes clean root metadata
@@ -114,14 +115,24 @@ async function configureProject(
 }
 
 function printNextSteps(config: ScaffoldConfig): void {
-  const { projectName, packageManager, installDependencies: didInstall } = config;
+  const { projectName, packageManager, installDependencies: didInstall, scaffoldInPlace } = config;
   const lines = [
-    `cd ${projectName}`,
+    scaffoldInPlace ? null : `cd ${projectName}`,
     didInstall ? null : `${packageManager} install`,
     `${runScript(packageManager, "dev")}   # start the dev server on http://localhost:3000`,
   ].filter((line): line is string => line !== null);
 
   note(lines.join("\n"), "Next steps");
+}
+
+/** Abort if the current directory has anything in it — `.` must only scaffold into an empty one. */
+async function ensureCurrentDirectoryIsEmpty(directory: string): Promise<void> {
+  const entries = await readdir(directory);
+  if (entries.length > 0) {
+    abort(
+      `Current directory is not empty — clear it first, or run create-notils in (or with) a new, empty directory.`
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -140,8 +151,13 @@ async function main(): Promise<void> {
     config.packageManager = await promptPackageManager();
   }
 
-  const targetDirectory = resolve(process.cwd(), config.projectName);
-  if (existsSync(targetDirectory)) {
+  const targetDirectory = config.scaffoldInPlace
+    ? process.cwd()
+    : resolve(process.cwd(), config.projectName);
+
+  if (config.scaffoldInPlace) {
+    await ensureCurrentDirectoryIsEmpty(targetDirectory);
+  } else if (existsSync(targetDirectory)) {
     abort(`Directory "${config.projectName}" already exists.`);
   }
 

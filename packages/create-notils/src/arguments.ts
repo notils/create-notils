@@ -2,14 +2,28 @@
 // independent of how the values arrive (commander flags or interactive prompts),
 // so both paths in `config.ts` share exactly the same rules.
 
+/** Fallback project name — used for an empty prompt answer and for an unusable `.` folder name. */
+export const DEFAULT_PROJECT_NAME = "my-app";
+
 /** Project and app names: lowercase letters/numbers/dashes, starting alphanumeric. */
 export function isValidProjectName(name: string | undefined): name is string {
   return typeof name === "string" && /^[a-z0-9][a-z0-9-]*$/.test(name);
 }
 
-/** Reverse-DNS bundle-identifier prefix, e.g. `com.acme`. */
-export function isValidBundleIdentifierPrefix(value: string | undefined): value is string {
-  return typeof value === "string" && /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(value);
+/**
+ * Sanitize an arbitrary string (e.g. a directory's basename) into a valid
+ * project name, falling back to `DEFAULT_PROJECT_NAME` if nothing usable
+ * survives. Used when scaffolding into `.`, where the name comes from the
+ * current directory rather than user input.
+ */
+export function toValidProjectName(rawName: string): string {
+  const sanitized = rawName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return isValidProjectName(sanitized) ? sanitized : DEFAULT_PROJECT_NAME;
 }
 
 /**
@@ -21,10 +35,4 @@ export function parseAppNames(value: string): string[] {
   const allValid = names.every(isValidProjectName);
   const allUnique = new Set(names).size === names.length;
   return allValid && allUnique ? names : [];
-}
-
-/** Derive a default bundle-id prefix from a project name, e.g. `my-app` -> `com.myapp`. */
-export function defaultBundleIdentifierPrefix(projectName: string): string {
-  const identifierSegment = projectName.replace(/[^a-z0-9]/gi, "").toLowerCase();
-  return `com.${identifierSegment}`;
 }

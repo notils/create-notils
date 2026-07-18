@@ -17,15 +17,8 @@ type AppPackageJson = {
  * monorepo scaffold. The first requested app reuses the template app in place;
  * each additional app is a copy. Every app gets a unique package name and a
  * distinct dev port so `turbo run dev` can run them side by side.
- *
- * `bundleIdentifierPrefix` is reserved for future native targets; it is accepted
- * here so the signature is stable, but has no effect on a web app today.
  */
-export async function generateApps(
-  projectRoot: string,
-  appNames: string[],
-  _bundleIdentifierPrefix: string
-): Promise<void> {
+export async function generateApps(projectRoot: string, appNames: string[]): Promise<void> {
   const appsDirectory = join(projectRoot, "apps");
   const templateAppDirectory = join(appsDirectory, TEMPLATE_APP_NAME);
 

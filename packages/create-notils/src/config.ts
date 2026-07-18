@@ -1,10 +1,11 @@
+import { basename } from "node:path";
 import { cancel, confirm, isCancel, select, text } from "@clack/prompts";
 
 import {
-  defaultBundleIdentifierPrefix,
-  isValidBundleIdentifierPrefix,
+  DEFAULT_PROJECT_NAME,
   isValidProjectName,
   parseAppNames,
+  toValidProjectName,
 } from "./arguments.js";
 import type { CliOptions, ParsedCli } from "./cli.js";
 
@@ -14,12 +15,12 @@ export type PackageManager = "bun" | "pnpm" | "npm" | "yarn";
 /** The fully-resolved answers that drive scaffolding, from flags and/or prompts. */
 export type ScaffoldConfig = {
   projectName: string;
+  /** True when `.` was given: scaffold into the current directory instead of creating one. */
+  scaffoldInPlace: boolean;
   projectType: ProjectType;
   /** App names under `apps/`. Monorepo only; empty for standalone. */
   appNames: string[];
   packageManager: PackageManager;
-  /** Reverse-DNS prefix reserved for future native targets; harmless for web. */
-  bundleIdentifierPrefix: string;
   installDependencies: boolean;
   initializeGit: boolean;
 };
@@ -54,48 +55,61 @@ export async function resolveScaffoldConfig(parsed: ParsedCli): Promise<Scaffold
   const { options } = parsed;
   const acceptDefaults = options.yes === true;
 
-  const projectName = await resolveProjectName(parsed.projectName);
+  const { projectName, scaffoldInPlace } = await resolveProjectName(parsed.projectName);
   const projectType = await resolveProjectType(options, acceptDefaults);
   const appNames = projectType === "monorepo" ? await resolveAppNames(options, acceptDefaults) : [];
   const packageManager = resolvePackageManager(options, acceptDefaults);
-  const bundleIdentifierPrefix = await resolveBundleIdentifierPrefix(
-    options,
-    acceptDefaults,
-    projectName
-  );
   const installDependencies = await resolveInstallDependencies(options, acceptDefaults);
   const initializeGit = options.git !== false;
 
   return {
     projectName,
+    scaffoldInPlace,
     projectType,
     appNames,
     packageManager,
-    bundleIdentifierPrefix,
     installDependencies,
     initializeGit,
   };
 }
 
-async function resolveProjectName(fromPositional: string | undefined): Promise<string> {
+type ProjectNameResolution = { projectName: string; scaffoldInPlace: boolean };
+
+/** `.` means "scaffold here" — the name comes from the current directory, sanitized. */
+function resolveCurrentDirectoryTarget(): ProjectNameResolution {
+  return { projectName: toValidProjectName(basename(process.cwd())), scaffoldInPlace: true };
+}
+
+async function resolveProjectName(
+  fromPositional: string | undefined
+): Promise<ProjectNameResolution> {
   if (fromPositional !== undefined) {
+    if (fromPositional === ".") {
+      return resolveCurrentDirectoryTarget();
+    }
     if (!isValidProjectName(fromPositional)) {
       abort(
-        `Invalid project name "${fromPositional}" — use lowercase letters, numbers, and dashes.`
+        `Invalid project name "${fromPositional}" — use lowercase letters, numbers, and dashes (or "." for the current directory).`
       );
     }
-    return fromPositional;
+    return { projectName: fromPositional, scaffoldInPlace: false };
   }
 
   const answer = requireAnswer(
     await text({
       message: "Project name?",
-      placeholder: "my-app",
+      placeholder: DEFAULT_PROJECT_NAME,
+      defaultValue: DEFAULT_PROJECT_NAME,
       validate: (value) =>
-        isValidProjectName(value) ? undefined : "Use lowercase letters, numbers, and dashes only.",
+        value === "." || isValidProjectName(value)
+          ? undefined
+          : `Use lowercase letters, numbers, and dashes only (or "." for the current directory).`,
     })
   );
-  return answer;
+  if (answer === ".") {
+    return resolveCurrentDirectoryTarget();
+  }
+  return { projectName: answer, scaffoldInPlace: false };
 }
 
 async function resolveProjectType(
@@ -187,35 +201,6 @@ export async function promptPackageManager(): Promise<PackageManager> {
     })
   );
   return answer;
-}
-
-async function resolveBundleIdentifierPrefix(
-  options: CliOptions,
-  acceptDefaults: boolean,
-  projectName: string
-): Promise<string> {
-  const defaultPrefix = defaultBundleIdentifierPrefix(projectName);
-
-  if (options.bundleIdPrefix !== undefined || acceptDefaults) {
-    const prefix = options.bundleIdPrefix ?? defaultPrefix;
-    if (!isValidBundleIdentifierPrefix(prefix)) {
-      abort(`Invalid --bundle-id-prefix "${prefix}" (expected reverse-DNS, e.g. com.acme).`);
-    }
-    return prefix;
-  }
-
-  const answer = requireAnswer(
-    await text({
-      message: "Bundle identifier prefix?",
-      placeholder: defaultPrefix,
-      defaultValue: defaultPrefix,
-      validate: (value) =>
-        isValidBundleIdentifierPrefix(value || defaultPrefix)
-          ? undefined
-          : "Reverse-DNS, e.g. com.acme",
-    })
-  );
-  return answer || defaultPrefix;
 }
 
 async function resolveInstallDependencies(
