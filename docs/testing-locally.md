@@ -202,40 +202,50 @@ console errors. Ctrl+C stops the dev server(s).
 ## Publishing to npm
 
 The package publishes only `dist/` + `package.json` + `README.md` +
-`CHANGELOG.md` (the `files` allowlist), is marked `publishConfig.access:
-public`, and rebuilds via `prepublishOnly`.
+`CHANGELOG.md` (the `files` allowlist), and is marked
+`publishConfig.access: public`.
+
+**Use `bun publish`, directly from `packages/create-notils` — no workaround
+needed:**
 
 ```sh
 cd packages/create-notils
-npm publish
+bun publish             # builds (via prepublishOnly), packs, and publishes
+# or: bun publish --dry-run   to preview without publishing
 ```
 
-> ⚠️ **devEngines gotcha.** The repo root pins `devEngines.packageManager: bun`,
-> so running **npm** anywhere in the workspace (including `npm publish` /
-> `npm pack`) fails with `EBADDEVENGINES`. Two ways around it:
->
-> - Publish from an isolated copy of the built package (no parent
->   `package.json`), or
-> - Bypass the check for that one command:
->   `npm publish --no-devEngines` is **not** a real flag — instead set
->   `npm_config_engine_strict` is also insufficient; the reliable route is to
->   run `npm pack` in an isolated dir (see below) and `npm publish <tarball>`.
->
-> Isolated publish (works around the workspace root):
+If the npm account has 2FA/OTP enabled (recommended), `bun publish` prints a
+URL to approve the publish in a real browser. That step needs an actual human
+in an actual browser — run this command in your own interactive terminal, not
+through an agent or a scripted/non-interactive shell.
+
+> ⚠️ **Why not `npm publish`?** The repo root pins
+> `devEngines.packageManager: bun`, so **any** npm command — `npm publish`,
+> `npm pack`, even `npm whoami` / `npm login` — run from anywhere under this
+> repo fails with `EBADDEVENGINES` (npm walks up to the nearest `package.json`
+> and enforces the pin). Bun *is* the sanctioned manager here, so
+> `bun publish` never hits this. Only reach for npm if bun is genuinely
+> unavailable:
 > ```sh
 > cd packages/create-notils && bun run build
 > tmp=$(mktemp -d) && cp -r package.json README.md CHANGELOG.md dist "$tmp"/ && cd "$tmp"
 > npm pack                       # sanity-check contents
-> npm publish ./create-notils-*.tgz
+> npm publish ./create-notils-*.tgz   # NOT bare `npm publish` — see below
 > ```
+> Publish via the tarball's explicit path, not bare `npm publish`, even from
+> this isolated copy — bare `npm publish` still runs `prepublishOnly`
+> (`bun run build`), which fails there since the isolated copy has no
+> `node_modules` (`tsup` isn't installed). Publishing the already-built
+> tarball file skips lifecycle scripts entirely and avoids that.
 
 Before any publish, bump the version and cut a matching **template tag** so the
 published CLI's `TEMPLATE_REF` points at a frozen template snapshot (not `main`):
 
 1. Bump `version` in `packages/create-notils/package.json`.
 2. Set `TEMPLATE_REF` in `src/scaffold.ts` to the tag you're about to push (e.g. `v0.1.0`).
-3. `git tag v0.1.0 && git push --tags`.
+3. Tag with the full release notes, not a one-liner: `git tag -a v0.1.0 -F <notes-file>`, then `git push origin main --tags`.
 4. Build + publish as above.
+5. Verify the tag actually resolves: scaffold a test project with the freshly built CLI and confirm the fetch step shows `notils/create-notils#v<version>` succeeding.
 
 ## Notes
 

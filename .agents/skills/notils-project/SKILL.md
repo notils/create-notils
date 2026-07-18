@@ -221,51 +221,50 @@ before touching `packages/create-notils/src/*`:
 
 ### Releasing a new CLI version to npm
 
-Full mechanical steps (build, isolated-dir workaround, `npm pack --dry-run`
-checklist) are in
+Full mechanical steps are in
 [docs/testing-locally.md](../../../docs/testing-locally.md)'s "Publishing to
 npm" section — follow that. Additional things learned cutting v0.1.0, not to
 re-discover:
 
-1. **`CHANGELOG.md` needs an explicit `files` entry.** npm's "always
+1. **Publish with `bun publish`, directly from `packages/create-notils` — not
+   `npm publish`.** The repo root pins `devEngines.packageManager: bun`, so
+   *any* npm command (`npm publish`, `npm pack`, even `npm whoami` /
+   `npm login`) run from anywhere under this repo fails with
+   `EBADDEVENGINES` — npm walks up to the nearest `package.json` and enforces
+   the pin. Bun IS the sanctioned manager, so `bun publish` never hits this;
+   it builds (via `prepublishOnly`), packs, and publishes in one step, with
+   no isolated-copy dance. Only fall back to the npm route (isolated copy,
+   `npm publish <tarball-path>` — never bare `npm publish`, which re-triggers
+   `prepublishOnly` in a dir with no `node_modules`) if bun is genuinely
+   unavailable.
+2. **The OTP/2FA browser-approval step cannot be automated or run by an
+   agent** — it's an npm-registry security check tied to a human clicking a
+   real browser link, independent of whether `bun publish` or `npm publish`
+   is used. Same for `npm login` itself (`ENEEDAUTH` if not yet logged in).
+   Both must run in the user's own interactive terminal.
+3. **`CHANGELOG.md` needs an explicit `files` entry.** npm's "always
    included regardless of `files`" set is `package.json`/`README`/`LICENSE` —
    **not** `CHANGELOG.md`. Confirmed via `npm pack --dry-run`: without adding
    `"CHANGELOG.md"` to `package.json`'s `files` array, it silently doesn't
    ship even though it sits right next to `README.md`.
-2. **Pin `TEMPLATE_REF`** (`src/scaffold.ts`) to the tag being cut (e.g.
+4. **Pin `TEMPLATE_REF`** (`src/scaffold.ts`) to the tag being cut (e.g.
    `"v0.1.0"`), not left floating on `"main"` — the template IS this repo, so
    the tag doubles as both the npm release marker and the frozen template
    snapshot `tiged` fetches. **Verify it resolves** before publishing: after
    pushing the tag, scaffold a test project with the freshly-built CLI and
    confirm the fetch step shows `notils/create-notils#v<version>` succeeding
    (catches a typo'd or unpushed tag before it's public).
-3. **Publish via an explicit tarball path, never bare `npm publish`, from the
-   isolated dir.** `npm publish ./create-notils-*.tgz` skips lifecycle
-   scripts entirely and is clean. Bare `npm publish` (or even
-   `npm publish --ignore-scripts`) run *inside* the isolated copy instead
-   triggers `prepublishOnly` (`bun run build`), which fails there —
-   `tsup` isn't installed in that directory (no `node_modules`, since only
-   `package.json`/`README.md`/`CHANGELOG.md`/`dist` were copied over) — and
-   npm's own error-recovery path when a lifecycle script fails mid-publish
-   can print a spurious `"bin[...]" was invalid and removed` warning that
-   looks alarming but doesn't reflect the actual tarball (verified with
-   `npm pack --dry-run` immediately after: `bin` was intact).
-4. **Tag with the full release notes, not a one-liner** —
+5. **Tag with the full release notes, not a one-liner** —
    `git tag -a vX.Y.Z -F <notes-file>` (or `-m`), where the notes are (at
    minimum) that version's `CHANGELOG.md` section. A short annotation message
    is the easy mistake; fixing it after push means `git tag -f` + force-push
    the tag (safe only because nothing else could have fetched it yet).
-5. **Also create a GitHub Release** (`gh release create vX.Y.Z --notes-file
+6. **Also create a GitHub Release** (`gh release create vX.Y.Z --notes-file
    <notes-file>`, or the GitHub web UI) — separate from the git tag's own
    annotation; that's what actually renders on the repo's Releases page.
    Requires `gh` installed and authenticated (`gh auth login`) — if
    unavailable, do the git tag step above regardless and hand the notes file
    to whoever creates the Release manually.
-6. **`npm login` cannot run non-interactively** (browser/OTP flow) — verify
-   auth first with `npm whoami` (run from *outside* the workspace, or it
-   hits the same `EBADDEVENGINES` gate as any other npm command here); if it
-   fails with `ENEEDAUTH`, that's a hard stop until the user logs in
-   themselves.
 
 ## Roadmap — PLANNED, NOT YET BUILT
 
