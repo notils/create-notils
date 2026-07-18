@@ -54,3 +54,30 @@ export async function tryRunCommand(
     return false;
   }
 }
+
+/**
+ * Run a command and resolve to its trimmed stdout, or `undefined` if it
+ * fails to spawn or exits non-zero. For lightweight, best-effort reads (e.g.
+ * `<tool> --version`) where a missing tool shouldn't abort the caller.
+ */
+export function getCommandOutput(
+  command: string,
+  args: string[],
+  options: RunCommandOptions
+): Promise<string | undefined> {
+  return new Promise((resolvePromise) => {
+    const child = spawn(command, args, {
+      cwd: options.workingDirectory,
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: options.useShell ?? false,
+    });
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.on("error", () => resolvePromise(undefined));
+    child.on("close", (exitCode) => {
+      resolvePromise(exitCode === 0 ? output.trim() : undefined);
+    });
+  });
+}

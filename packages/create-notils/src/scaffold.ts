@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { PackageManager } from "./config.js";
@@ -8,6 +9,7 @@ import {
   writeJsonFile,
   writeTextFile,
 } from "./filesystem.js";
+import { getCommandOutput } from "./process.js";
 
 // The template is the create-notils repository itself, pinned to a release tag
 // for reproducible scaffolds. Bump this when cutting a new template release.
@@ -81,7 +83,20 @@ ${run("typecheck")}
 /**
  * Ensure the scaffold's root package.json advertises the chosen package manager
  * via `devEngines.packageManager`, so contributors are steered to the right tool.
- * A no-op if the field can't be read.
+ *
+ * turbo hard-requires this field (or the legacy `packageManager` string) to
+ * run at all — a monorepo scaffold without one fails with "Could not resolve
+ * workspace... Missing devEngines.packageManager" the moment `turbo run dev`
+ * is invoked. And unlike npm's own devEngines check, turbo's parser rejects
+ * a name-only entry ("devEngines.packageManager.version is required"), so a
+ * real version is mandatory whenever this field is written at all.
+ *
+ * The template only has one legitimate version to carry over: bun's own pin.
+ * For any other manager there's nothing safe to reuse — hardcoding some
+ * other version would either be wrong or, worse, force-pin a version the
+ * user doesn't have. So for a non-bun manager, detect the version actually
+ * installed on this machine (`<manager> --version`) — it's the same tool
+ * about to run `install`/`dev` anyway, so this is both accurate and free.
  */
 export async function alignPackageManagerField(
   projectRoot: string,
@@ -93,14 +108,33 @@ export async function alignPackageManagerField(
     | { packageManager?: { name?: string; version?: string } }
     | undefined;
 
-  // The template pins an exact bun version. That pin has no relation to any
-  // other manager's version, so only keep it when bun is still the chosen
-  // manager — otherwise it would assert a nonsensical pin (e.g. pnpm@1.3.14).
-  const version = packageManager === "bun" ? existing?.packageManager?.version : undefined;
+  // Detect from a neutral directory, NOT projectRoot: at this point the
+  // scaffold's package.json still carries the template's original
+  // `devEngines: bun` pin (this function is what overwrites it, further
+  // down) — pnpm/npm/bun each enforce that pin themselves when invoked
+  // inside a directory that declares it, so running `<manager> --version`
+  // from inside the scaffold can itself fail for an unrelated reason.
+  const version =
+    packageManager === "bun"
+      ? existing?.packageManager?.version
+      : await getCommandOutput(packageManager, ["--version"], {
+          workingDirectory: tmpdir(),
+          useShell: process.platform === "win32",
+        });
+
+  if (!version) {
+    // Couldn't determine a real version for the chosen manager (not
+    // installed on this machine) — remove the stale bun-specific pin rather
+    // than leave a wrong or unparseable devEngines behind; turbo's own error
+    // message is a clearer signal than a misleading one.
+    delete packageJson.devEngines;
+    await writeJsonFile(packageJsonPath, packageJson);
+    return;
+  }
 
   packageJson.devEngines = {
     ...existing,
-    packageManager: version ? { name: packageManager, version } : { name: packageManager },
+    packageManager: { name: packageManager, version },
   };
   await writeJsonFile(packageJsonPath, packageJson);
 }
