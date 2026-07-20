@@ -1,6 +1,6 @@
 # CLI architecture: monorepo vs standalone (one source, two shapes)
 
-Status: **design / spec** (the `create-notils` CLI is not built yet). This document is the contract the CLI must implement.
+Status: **implemented** (`create-notils` is published on npm). This document is the contract the CLI implements; keep it in sync as features land — the auth boundary (Better Auth + shared api-client) will be added here once that work ships.
 
 ## Goal
 

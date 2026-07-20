@@ -1,0 +1,10 @@
+{
+  "extends": "@notils/config/tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@notils/api-client/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
