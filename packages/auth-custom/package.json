@@ -1,0 +1,29 @@
+{
+  "name": "@notils/auth-custom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./contract": "./src/contract.ts",
+    "./provider": "./src/provider.ts",
+    "./use-auth": "./src/use-auth.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@notils/api-client": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@notils/config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "typescript": "^6.0.3"
+  }
+}

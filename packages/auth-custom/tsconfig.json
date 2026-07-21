@@ -1,0 +1,10 @@
+{
+  "extends": "@notils/config/tsconfig.react.json",
+  "compilerOptions": {
+    "paths": {
+      "@notils/auth-custom/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

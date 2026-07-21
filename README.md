@@ -169,6 +169,8 @@ bun run dev --filter=app
 
 ## Roadmap
 
+> For the concrete, checkbox-level tracking of what's built and what's next, see [docs/ROADMAP.md](docs/ROADMAP.md). The phases below describe direction; that file tracks execution.
+
 ### Phase 1 — Personal Starter
 
 A single opinionated template used to bootstrap all of my own projects. No prompts. No templates. Just one command.

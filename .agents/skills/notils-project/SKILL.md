@@ -1,6 +1,6 @@
 ---
 name: notils-project
-description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the package layout, or dependencies. Applies to any work under apps/* or packages/*.
+description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the auth capability/provider architecture (@notils/api-client, @notils/auth-custom), the package layout, or dependencies. Applies to any work under apps/* or packages/*.
 ---
 
 # create-notils — project guide
@@ -22,13 +22,15 @@ create-notils/
 │       └── postcss.config.mjs  #   @tailwindcss/postcss
 ├── packages/
 │   ├── config/                 # @notils/config — shared tsconfig.* + biome.json
-│   └── ui/                     # @notils/ui — the shared shadcn/ui kit (see below)
-│       ├── src/
-│       │   ├── components/ui/  #   shadcn components (button, ...)
-│       │   ├── lib/utils.ts    #   cn()
-│       │   ├── hooks/          #   shared hooks
-│       │   └── styles/globals.css  # SINGLE source of truth for theming
-│       └── components.json     #   shadcn CLI config (aliases → @notils/ui, base UI)
+│   ├── ui/                     # @notils/ui — the shared shadcn/ui kit (see below)
+│   │   ├── src/
+│   │   │   ├── components/ui/  #   shadcn components (button, ...)
+│   │   │   ├── lib/utils.ts    #   cn()
+│   │   │   ├── hooks/          #   shared hooks
+│   │   │   └── styles/globals.css  # SINGLE source of truth for theming
+│   │   └── components.json     #   shadcn CLI config (aliases → @notils/ui, base UI)
+│   ├── api-client/             # @notils/api-client — platform-neutral HTTP transport core
+│   └── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
 ├── biome.json                  # root Biome (extends @notils/config/biome.json)
 ├── turbo.json                  # Turborepo pipeline
 └── package.json                # workspaces (apps/*, packages/*) + root scripts
@@ -42,6 +44,7 @@ create-notils/
 4. **We did NOT use `shadcn init --monorepo`.** That flag scaffolds shadcn's *own* opinionated monorepo (its own app/tsconfig/tailwind wiring) and fights our config. It's for greenfield only. We wire shadcn manually into `packages/ui` so it respects our setup — the same pattern shadcn's monorepo output uses underneath.
 5. **Base UI is the component base, not Radix.** `components.json` `style: "base-nova"` → `shadcn info` reports `base: "base"`. Components import from `@base-ui/react/*`. We migrated off the unified `radix-ui` package (see "Base UI vs Radix").
 6. **Tailwind v4, CSS-first (no `tailwind.config.js`).** Theme tokens + `@theme inline` + `.dark` class variant all live in `packages/ui/src/styles/globals.css`.
+7. **Every package under `packages/*` ships a `README.md`.** Match the existing convention (`packages/ui/README.md`, `packages/config/README.md`, `packages/api-client/README.md`, `packages/auth-custom/README.md`): a one-line purpose statement, a "What's inside" file-tree summary, a minimal usage example, and (for anything non-obvious) why it's built the way it is. Add the README in the same change that adds the package — not as later cleanup.
 
 ## The `@notils/ui` package — the shared design system
 
@@ -326,13 +329,56 @@ not to re-discover:
    checking a config field's value (e.g. `devEngines`) is not enough; it
    caught neither bug here.
 
+## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider)
+
+Full design: [`docs/auth-and-api-client-design.md`](../../../docs/auth-and-api-client-design.md)
+and [`docs/packages-and-providers-architecture.md`](../../../docs/packages-and-providers-architecture.md).
+Concrete tracking: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md) — check that
+file for current status, not this list.
+
+Auth is a **capability** with swappable **providers** behind one contract
+(`AuthContract<TUser, TSignIn, TSignUp>`), not a single hardcoded
+integration — because "add Better Auth" and "I already have a backend that
+does auth" are both real, common cases that need different generated code.
+
+- **`packages/api-client`** (`@notils/api-client`) — BUILT. Platform-neutral
+  HTTP transport core (`createHttpClient`, `HttpError`, the `AuthProvider`
+  seam). Depends only on `fetch`/`Headers`/`URL`/`AbortController` — no
+  browser or Node-only APIs — so the same core targets web, React Native, or
+  any other JS/TS runtime later. Ported from `rn-monorepo`'s `http.ts`. Not
+  yet consumed by `apps/app`.
+- **`packages/auth-custom`** (`@notils/auth-custom`) — BUILT. The
+  custom-backend provider: for a project with its own existing auth backend
+  (no server scaffolded here). `AuthContract` is **generic over the caller's
+  own Zod schemas** (`TUser`/`TSignIn`/`TSignUp` are inferred, not
+  hand-declared), and `CustomBackendAuthConfig` has **no assumed defaults**
+  — every endpoint path and every response/input shape is a Zod schema the
+  caller supplies. A `ZodError` (response doesn't match the schema) throws
+  loudly; an `HttpError` (network/API failure) is caught into `AuthResult`.
+  Not yet wired into `apps/app`; no UI components yet.
+- **Tier 1 vs Tier 2 UI split** (not yet built): Tier 1 — sign-in/up,
+  password reset, session, sign-out — gets one shared `@notils/ui`-styled
+  component set driven only by `AuthContract`, identical regardless of
+  provider. Tier 2 — 2FA, passkey, SSO, magic link, orgs — is
+  provider-specific by design (a custom backend usually doesn't implement
+  these the same way, if at all) and only scaffolds with the Better Auth
+  provider.
+- **Better Auth provider** — NOT YET BUILT. Server config + client + Better
+  Auth UI. Open risk to verify hands-on before building: Better Auth UI's
+  shadcn variant likely assumes Radix; this repo is on Base UI (see "Base UI
+  vs Radix" above) — may need re-porting its components rather than dropping
+  them in directly.
+- **`bunx create-notils add <capability>`** — NOT YET BUILT. The delivery
+  mechanism for adding a provider to an already-scaffolded project (not just
+  at initial scaffold time). Needed before a second provider is worth
+  building, so it's sequenced before the Better Auth provider.
+
 ## Roadmap — PLANNED, NOT YET BUILT
 
-Do not assume these files/APIs exist; if asked to use them, build them first or confirm scope.
+Do not assume these files/APIs exist; if asked to use them, build them first or confirm scope. See [`docs/ROADMAP.md`](../../../docs/ROADMAP.md) for the concrete, checkbox-level tracking of these.
 
-- **`packages/auth`** — Better Auth server config + client + Better Auth UI, depending on `packages/db`. Auth pages (`/login`, `/register`) live in `apps/app` and consume `@notils/ui` primitives (keep UI and auth decoupled). Auth enabled by default is a stated goal.
 - **`packages/db`** — PostgreSQL + Drizzle ORM.
 - **Docker** config, env-var setup, CI/CD workflows.
-- **rnstack merge** — [rnstack](https://github.com/sanjaysah101/rnstack) (a React Native starter) as a second template variant alongside the Next.js one, consuming the same CLI. This is also when a real `--bundle-id-prefix`-equivalent prompt would come back (native reverse-DNS identifiers), scoped to that target.
+- **rnstack merge** — [rnstack](https://github.com/sanjaysah101/rnstack) (a React Native starter) as a second template variant alongside the Next.js one, consuming the same CLI. This is also when a real `--bundle-id-prefix`-equivalent prompt would come back (native reverse-DNS identifiers), scoped to that target. Also when `@notils/api-client` gets its first non-web `AuthProvider`, proving out the "platform-agnostic" claim for real.
 
 When implementing roadmap items, follow the conventions above and refresh THIS skill so it stays the accurate source of truth.
