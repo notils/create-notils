@@ -46,13 +46,52 @@ integration, and it has zero external unknowns to de-risk.
         at the call site.
   - [ ] Add-time `add` command prompts to fill in `CustomBackendAuthConfig`
         interactively (blocked on the `add` command itself, next section)
-- [ ] Tier 1 UI components in `@notils/ui` style: `<SignInForm/>`,
-      `<SignUpForm/>`, `<ForgotPasswordForm/>`, session/sign-out affordance,
-      protected-route wrapper — calling the `AuthContract` returned by
-      `createAuthContract()` only, no provider-specific code.
-- [ ] Wire `@notils/api-client` + `@notils/auth-custom` into `apps/app` for
-      real (first real consumer — currently built, typechecked, but
-      unconsumed by any app).
+- [x] **`@notils/form-builder`** — a recursive Zod-schema-to-form renderer,
+      built from scratch after research found no existing library targets
+      Base UI (every shadcn-ecosystem form generator found —`@rjsf/shadcn`,
+      AutoForm, `@json-render/shadcn` — is Radix-coupled or young/beta; see
+      [packages-and-providers-architecture.md](packages-and-providers-architecture.md)
+      for the research summary). `walkSchema` (schema → `FieldDescriptor`
+      tree: object/array/discriminated-union/enum/primitives, fully
+      recursive) is primitive-agnostic; `field-renderer.tsx` (the
+      swappable half) renders via `@notils/ui`'s Base UI components.
+      `<SchemaForm/>` wires `react-hook-form` + `zodResolver` + the renderer
+      together. Verified end-to-end via a real Next.js production build.
+  - [x] **`uiHints`** — per-field conditional visibility (`showWhen`), style
+        overrides (`className`), and full custom render, keyed by field
+        path. Added while replicating a real hand-built contact form
+        (`apps/app/src/app/contact-form-replica.tsx`) that hides
+        email/country/message until an enquiry type is picked. Cross-field
+        *validation* (as opposed to visibility) needed no form-builder
+        change — a Zod `.superRefine()` writing `ctx.addIssue({path})`
+        already resolves to the right field's error via `zodResolver`.
+  - [x] **`layout`** — groups top-level fields into rows (e.g.
+        `[["firstName","lastName"], ["email"]]`) for multi-column forms,
+        without forking rendering code per form. Deliberately chosen over a
+        codegen approach (schema → generated `.tsx` file): codegen gives
+        arbitrary layout freedom but forks on generation — a bug fix in the
+        generator never reaches an already-generated file. `layout` +
+        `uiHints` stays inside form-builder's single fixable/reusable core;
+        revisit codegen only if a real form needs something this genuinely
+        can't express.
+  - [x] Base UI `Select` bugs found and fixed while building the contact-form
+        replica: (1) controlled/uncontrolled warning from defaulting an
+        unset field's `value` to `undefined` instead of `""`; (2)
+        `alignItemWithTrigger` (Base UI's default select-popup behavior,
+        which overlaps the popup with the trigger to align the *selected*
+        item) reserving wrong/excess vertical space before a real selection
+        exists — fixed by passing `alignItemWithTrigger={false}`.
+- [x] Tier 1 UI components — **`@notils/auth-ui`**: `<SignInForm/>`,
+      `<SignUpForm/>`, `<ForgotPasswordForm/>`, `<SessionStatus/>` (session +
+      sign-out), `<ProtectedRoute/>` (framework-agnostic gating; redirect is
+      the caller's job via `onUnauthenticated`) — all driven only by
+      `AuthContract`, built on `@notils/form-builder`'s `<SchemaForm/>`, no
+      provider-specific code. Verified end-to-end (all five components)
+      against a fake `AuthContract` via a real Next.js production build.
+- [ ] Wire `@notils/api-client` + `@notils/auth-custom` + `@notils/auth-ui`
+      into `apps/app` for real (first real consumer — currently built,
+      typechecked, and build-verified via throwaway smoke tests, but not
+      yet part of the actual scaffolded template).
 - [ ] Extend the golden build test: scaffold with auth added, confirm
       build/typecheck, confirm no unmapped `@notils/` specifiers survive
       standalone flatten (same discipline as existing boundary map).

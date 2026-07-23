@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter='./apps/*'",
+    "dev:cli": "turbo run dev --filter=create-notils",
     "lint": "turbo run lint",
     "lint:fix": "biome check . --write",
     "lint:unsafe": "biome check . --write --unsafe",

@@ -1,6 +1,6 @@
 ---
 name: notils-project
-description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the auth capability/provider architecture (@notils/api-client, @notils/auth-custom), the package layout, or dependencies. Applies to any work under apps/* or packages/*.
+description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the auth capability/provider architecture (@notils/api-client, @notils/auth-custom, @notils/auth-ui), the schema-to-form renderer (@notils/form-builder), the package layout, or dependencies. Applies to any work under apps/* or packages/*.
 ---
 
 # create-notils — project guide
@@ -30,7 +30,9 @@ create-notils/
 │   │   │   └── styles/globals.css  # SINGLE source of truth for theming
 │   │   └── components.json     #   shadcn CLI config (aliases → @notils/ui, base UI)
 │   ├── api-client/             # @notils/api-client — platform-neutral HTTP transport core
-│   └── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
+│   ├── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
+│   ├── form-builder/           # @notils/form-builder — recursive Zod-schema-to-form renderer (Base UI)
+│   └── auth-ui/                # @notils/auth-ui — Tier 1 auth UI (SignInForm, SignUpForm, ...), AuthContract-driven
 ├── biome.json                  # root Biome (extends @notils/config/biome.json)
 ├── turbo.json                  # Turborepo pipeline
 └── package.json                # workspaces (apps/*, packages/*) + root scripts
@@ -329,7 +331,7 @@ not to re-discover:
    checking a config field's value (e.g. `devEngines`) is not enough; it
    caught neither bug here.
 
-## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider)
+## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 
 Full design: [`docs/auth-and-api-client-design.md`](../../../docs/auth-and-api-client-design.md)
 and [`docs/packages-and-providers-architecture.md`](../../../docs/packages-and-providers-architecture.md).
@@ -355,14 +357,36 @@ does auth" are both real, common cases that need different generated code.
   — every endpoint path and every response/input shape is a Zod schema the
   caller supplies. A `ZodError` (response doesn't match the schema) throws
   loudly; an `HttpError` (network/API failure) is caught into `AuthResult`.
-  Not yet wired into `apps/app`; no UI components yet.
-- **Tier 1 vs Tier 2 UI split** (not yet built): Tier 1 — sign-in/up,
-  password reset, session, sign-out — gets one shared `@notils/ui`-styled
-  component set driven only by `AuthContract`, identical regardless of
-  provider. Tier 2 — 2FA, passkey, SSO, magic link, orgs — is
-  provider-specific by design (a custom backend usually doesn't implement
-  these the same way, if at all) and only scaffolds with the Better Auth
-  provider.
+  Not yet wired into `apps/app` (still build-verified only via throwaway
+  smoke-test routes, cleaned up after each check).
+- **`packages/form-builder`** (`@notils/form-builder`) — BUILT. A recursive
+  Zod-schema-to-form renderer, written from scratch because research found
+  no existing library targets Base UI (every shadcn-ecosystem generator —
+  `@rjsf/shadcn`, AutoForm, `@json-render/shadcn` — is Radix-coupled or
+  young/beta; full research summary in
+  [packages-and-providers-architecture.md](../../../docs/packages-and-providers-architecture.md)).
+  Split cleanly: `walkSchema` (schema → `FieldDescriptor` tree — object,
+  array via `useFieldArray`, discriminated union via a variant picker, enum,
+  primitives, all recursive) has zero dependency on React or any UI
+  library; `field-renderer.tsx` (the swappable half) is the only place that
+  chooses actual `@notils/ui` components. `<SchemaForm/>` wires
+  `react-hook-form` + `zodResolver` + the renderer together. Reusable beyond
+  auth — not auth-specific despite being built to serve it first. One known
+  limitation: `zodResolver`'s TS overloads don't cleanly accept a generic
+  `z.ZodType<T>` (upstream issue, `react-hook-form/resolvers#842`) — isolated
+  behind one documented `as never` in `schema-form.tsx`; runtime behavior is
+  correct.
+- **Tier 1 vs Tier 2 UI split** — Tier 1 is BUILT as `packages/auth-ui`
+  (`@notils/auth-ui`): `<SignInForm/>`, `<SignUpForm/>`, `<ForgotPasswordForm/>`,
+  `<SessionStatus/>` (session + sign-out), `<ProtectedRoute/>` (gates
+  children on session status; deliberately does NOT redirect itself — that's
+  `next/navigation`'s job via an `onUnauthenticated` callback, kept
+  framework-agnostic for a future non-Next target). Built on
+  `@notils/form-builder`'s `<SchemaForm/>`; driven only by `AuthContract`,
+  identical regardless of provider. Tier 2 — 2FA, passkey, SSO, magic link,
+  orgs — is NOT YET BUILT and is provider-specific by design (a custom
+  backend usually doesn't implement these the same way, if at all); it will
+  only scaffold with the Better Auth provider.
 - **Better Auth provider** — NOT YET BUILT. Server config + client + Better
   Auth UI. Open risk to verify hands-on before building: Better Auth UI's
   shadcn variant likely assumes Radix; this repo is on Base UI (see "Base UI

@@ -4,6 +4,13 @@
    already scans the @notils/ui package's source. */
 @source "../";
 
+/* @notils/form-builder renders Tailwind classes of its own (schema-form.tsx,
+   descriptor-field.tsx, field-renderer.tsx) but isn't covered by any other
+   @source — it's a separate workspace package, not part of @notils/ui.
+   Without this, classes only used inside form-builder are silently never
+   generated (they don't error; they just have no effect at runtime). */
+@source "../../../../packages/form-builder/src/**/*.{ts,tsx}";
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

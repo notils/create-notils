@@ -9,10 +9,14 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@notils/auth-custom": "workspace:*",
+    "@notils/form-builder": "workspace:*",
+    "@notils/auth-ui": "workspace:*",
     "@notils/ui": "workspace:*",
     "next": "16.2.10",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",

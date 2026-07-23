@@ -1,0 +1,32 @@
+{
+  "name": "@notils/auth-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sign-in-form": "./src/sign-in-form.tsx",
+    "./sign-up-form": "./src/sign-up-form.tsx",
+    "./forgot-password-form": "./src/forgot-password-form.tsx",
+    "./session-status": "./src/session-status.tsx",
+    "./protected-route": "./src/protected-route.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@notils/auth-custom": "workspace:*",
+    "@notils/form-builder": "workspace:*",
+    "@notils/ui": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@notils/config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "typescript": "^6.0.3"
+  }
+}

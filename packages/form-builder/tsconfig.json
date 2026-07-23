@@ -1,0 +1,10 @@
+{
+  "extends": "@notils/config/tsconfig.react.json",
+  "compilerOptions": {
+    "paths": {
+      "@notils/form-builder/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
