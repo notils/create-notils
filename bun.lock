@@ -16,6 +16,7 @@
       "name": "app",
       "version": "0.1.0",
       "dependencies": {
+        "@notils/api-client": "workspace:*",
         "@notils/auth-custom": "workspace:*",
         "@notils/auth-ui": "workspace:*",
         "@notils/form-builder": "workspace:*",

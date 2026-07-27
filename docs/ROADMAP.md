@@ -88,13 +88,31 @@ integration, and it has zero external unknowns to de-risk.
       `AuthContract`, built on `@notils/form-builder`'s `<SchemaForm/>`, no
       provider-specific code. Verified end-to-end (all five components)
       against a fake `AuthContract` via a real Next.js production build.
-- [ ] Wire `@notils/api-client` + `@notils/auth-custom` + `@notils/auth-ui`
-      into `apps/app` for real (first real consumer — currently built,
-      typechecked, and build-verified via throwaway smoke tests, but not
-      yet part of the actual scaffolded template).
+- [x] Wire `@notils/api-client` + `@notils/auth-custom` + `@notils/auth-ui`
+      into `apps/app` for real — no longer just smoke tests:
+  - [x] `apps/app/src/lib/mock-auth-store.ts` + `app/api/auth/*` — an
+        in-memory mock backend (login/register/refresh/logout/session/
+        reset-password), standing in for a real backend so the template
+        demonstrates a genuine HTTP round-trip through `@notils/api-client`
+        instead of a fake in-JS `AuthContract`. Explicitly documented as a
+        stand-in a real project deletes and replaces with its own backend.
+  - [x] `apps/app/src/lib/auth.ts` — the real `CustomBackendAuthConfig` +
+        wired `AuthContract` (`localStorage`-backed token storage; a
+        cookie/SecureStore-backed version is a different platform's
+        concern, not this file's).
+  - [x] Real routes: `/login`, `/signup`, `/forgot-password` (using
+        `@notils/auth-ui`'s components against the real config above), and
+        `/dashboard` — gated by `<ProtectedRoute>` with a real
+        `next/navigation` `router.replace("/login")` redirect on
+        `onUnauthenticated`, plus `<SessionStatus>` for sign-out.
+  - [x] Verified via a real `next build` (not just typecheck): all 6 API
+        routes registered dynamic, all 4 pages + `/dashboard` registered
+        static, zero errors.
 - [ ] Extend the golden build test: scaffold with auth added, confirm
       build/typecheck, confirm no unmapped `@notils/` specifiers survive
-      standalone flatten (same discipline as existing boundary map).
+      standalone flatten (same discipline as existing boundary map). Not
+      yet done — the manual `next build` above proves the wiring works in
+      this repo, but CI doesn't yet check it automatically on every change.
 
 ## Next: `bunx create-notils add` command
 

@@ -9,6 +9,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@notils/api-client": "workspace:*",
     "@notils/auth-custom": "workspace:*",
     "@notils/form-builder": "workspace:*",
     "@notils/auth-ui": "workspace:*",
