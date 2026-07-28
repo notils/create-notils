@@ -12,13 +12,28 @@ import {
 
 // Turns the monorepo template into a single standalone Next.js project. The
 // monorepo is the single source of truth; this derives the standalone shape by
-// folding packages/ui + packages/config into the app and rewriting the handful
-// of cross-package references. See docs/cli-monorepo-vs-standalone.md for the
-// full boundary map this implements.
+// folding packages/ui + packages/config (+ any other internal `@notils/*`
+// library package — api-client, auth-custom, auth-ui, form-builder, ...) into
+// the app and rewriting the handful of cross-package references. See
+// docs/cli-monorepo-vs-standalone.md for the full boundary map this implements.
 //
 // After flattening, the layout matches what `shadcn init` produces for a single
-// app: src/{app,components,lib,hooks}, one package.json / tsconfig / biome /
-// components.json, and every import via the `@/*` alias.
+// app, extended with one `src/lib/<package>/` per internal library package:
+// src/{app,components,lib,hooks,lib/<package>}, one package.json / tsconfig /
+// biome / components.json, and every import via the `@/*` alias.
+
+/**
+ * Every internal `@notils/*` package OTHER than `ui`/`config` (which have
+ * their own dedicated handling below) that a standalone project needs folded
+ * in. Add a new package here — nothing else — when it's added to packages/
+ * and something in apps/app imports it; its `src/*` moves to
+ * `src/lib/<name>/*` and every `@notils/<name>/*` specifier rewrites to
+ * `@/lib/<name>/*`. This assumes the same shape `ui` already has: a flat
+ * `exports` map of `./subpath: ./src/subpath.ts(x)` entries (an `auth/*`-style
+ * nested export, as in api-client, works too — the rewrite is a prefix
+ * replace, not a fixed subpath list).
+ */
+const LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"] as const;
 
 /** Rewrite one `@notils/ui/<area>/...` specifier to its `@/<area>/...` form. */
 function rewriteUiSpecifier(specifier: string): string {
@@ -28,19 +43,37 @@ function rewriteUiSpecifier(specifier: string): string {
   return specifier.replace(/^@notils\/ui\//, "@/");
 }
 
+/** Rewrite one `@notils/<library>/<subpath>` specifier to its folded `@/lib/<library>/<subpath>` form. */
+function rewriteLibrarySpecifier(specifier: string): string {
+  // @notils/auth-custom/contract -> @/lib/auth-custom/contract
+  // @notils/api-client/auth/types -> @/lib/api-client/auth/types
+  for (const library of LIBRARY_PACKAGES) {
+    const prefix = `@notils/${library}/`;
+    if (specifier.startsWith(prefix)) {
+      return `@/lib/${library}/${specifier.slice(prefix.length)}`;
+    }
+  }
+  return specifier;
+}
+
 /**
- * Rewrite `@notils/ui/...` module specifiers inside import/export/require/CSS
- * `@import` statements. This is specifier-aware: it only touches quoted module
- * paths, never comments or prose that happen to contain the string.
+ * Rewrite `@notils/ui/...` and `@notils/<library>/...` module specifiers
+ * inside import/export/require/CSS `@import` statements. This is
+ * specifier-aware: it only touches quoted module paths, never comments or
+ * prose that happen to contain the string.
  */
 function rewriteSpecifiersInSource(contents: string): string {
-  // Matches a quoted specifier starting with @notils/ui/ in any of:
-  //   import ... from "@notils/ui/x"      export ... from '@notils/ui/x'
-  //   import("@notils/ui/x")              require("@notils/ui/x")
-  //   @import "@notils/ui/x"
+  // Matches a quoted specifier starting with @notils/ in any of:
+  //   import ... from "@notils/x/y"      export ... from '@notils/x/y'
+  //   import("@notils/x/y")              require("@notils/x/y")
+  //   @import "@notils/x/y"
   // We match the quoted string form directly, so only real specifiers change.
-  return contents.replace(/(["'])(@notils\/ui\/[^"']+)\1/g, (_match, quote, specifier) => {
-    return `${quote}${rewriteUiSpecifier(specifier)}${quote}`;
+  return contents.replace(/(["'])(@notils\/[^"']+)\1/g, (_match, quote, specifier) => {
+    const rewritten =
+      specifier === "@notils/ui" || specifier.startsWith("@notils/ui/")
+        ? rewriteUiSpecifier(specifier)
+        : rewriteLibrarySpecifier(specifier);
+    return `${quote}${rewritten}${quote}`;
   });
 }
 
@@ -175,20 +208,45 @@ function sortObjectKeys(record: Record<string, string>): Record<string, string> 
 }
 
 /**
- * Step 6: merge the app + ui package.json into the single standalone one.
- * Dependencies are the union minus workspace-internal entries; the ui `ui:add`
- * scripts move to the root so `shadcn add` works from the project root.
+ * Step 6: merge the app + ui + every folded library package's package.json
+ * into the single standalone one. Dependencies are the union minus
+ * workspace-internal entries; the ui `ui:add` scripts move to the root so
+ * `shadcn add` works from the project root. A library package's
+ * `peerDependencies` (typically just `react`) fold into `dependencies` too —
+ * standalone has no peer-dependency resolution step, and the app already
+ * provides a concrete version of anything a library peer-depends on.
  */
-async function mergePackageJson(projectRoot: string, projectName: string): Promise<void> {
+async function mergePackageJson(
+  projectRoot: string,
+  projectName: string,
+  foldedLibraryPackages: string[]
+): Promise<void> {
   const app = await readJsonFile<PackageJson>(join(projectRoot, "apps/app/package.json"));
   const ui = await readJsonFile<PackageJson>(join(projectRoot, "packages/ui/package.json"));
+  const libraries = await Promise.all(
+    foldedLibraryPackages.map((library) =>
+      readJsonFile<PackageJson & { peerDependencies?: Record<string, string> }>(
+        join(projectRoot, "packages", library, "package.json")
+      )
+    )
+  );
+
+  const libraryDependencies: Record<string, string> = {};
+  const libraryDevDependencies: Record<string, string> = {};
+  for (const library of libraries) {
+    Object.assign(libraryDependencies, withoutWorkspaceDeps(library.peerDependencies));
+    Object.assign(libraryDependencies, withoutWorkspaceDeps(library.dependencies));
+    Object.assign(libraryDevDependencies, withoutWorkspaceDeps(library.devDependencies));
+  }
 
   const dependencies = sortObjectKeys({
     ...withoutWorkspaceDeps(ui.dependencies),
+    ...libraryDependencies,
     ...withoutWorkspaceDeps(app.dependencies),
   });
   const devDependencies = sortObjectKeys({
     ...withoutWorkspaceDeps(ui.devDependencies),
+    ...libraryDevDependencies,
     ...withoutWorkspaceDeps(app.devDependencies),
     // Biome and husky are provided by the monorepo root; a standalone project
     // needs them directly.
@@ -276,7 +334,23 @@ export async function flattenToStandalone(projectRoot: string, projectName: stri
   await copyDirectoryIfExists(join(uiSrc, "hooks"), join(appSrc, "hooks"));
   await copyDirectoryIfExists(join(uiSrc, "theme"), join(appSrc, "theme"));
 
-  // 3. Rewrite @notils/ui/* specifiers across the app source now that the files live locally.
+  // 2b. Fold every other internal library package (api-client, auth-custom,
+  //     auth-ui, form-builder, ...) into src/lib/<package>/. Copy-if-exists:
+  //     not every scaffold necessarily includes every library package, so a
+  //     missing one is skipped rather than treated as an error.
+  const foldedLibraryPackages: string[] = [];
+  for (const library of LIBRARY_PACKAGES) {
+    const copied = await copyDirectoryIfExists(
+      join(projectRoot, "packages", library, "src"),
+      join(appSrc, "lib", library)
+    );
+    if (copied) {
+      foldedLibraryPackages.push(library);
+    }
+  }
+
+  // 3. Rewrite @notils/ui/* and @notils/<library>/* specifiers across the app
+  //    source AND each folded library package now that they all live locally.
   await rewriteSpecifiersInTree(appSrc);
 
   // 4. Inline config into the app.
@@ -287,7 +361,7 @@ export async function flattenToStandalone(projectRoot: string, projectName: stri
   await rewriteComponentsJson(projectRoot);
 
   // 6. Merge package.json into the app.
-  await mergePackageJson(projectRoot, projectName);
+  await mergePackageJson(projectRoot, projectName, foldedLibraryPackages);
 
   // 7. Promote the app to the project root, then drop monorepo-only artifacts.
   await promoteAppToRoot(projectRoot, appDir);
