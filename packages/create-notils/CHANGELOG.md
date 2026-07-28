@@ -4,6 +4,36 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.2.0
+
+### Added
+
+- **Authentication, scaffolded by default**: a custom-backend auth provider
+  (`@notils/auth-custom`) built on a new platform-neutral HTTP transport
+  core (`@notils/api-client`), Zod-schema-validated end to end — every
+  endpoint response is checked against a schema you define, so a mismatch
+  fails loudly with the exact field instead of silently producing a wrong
+  object. Every scaffold now ships a real, working example: an in-memory
+  mock auth backend (`app/api/auth/*`), `/login`, `/signup`,
+  `/forgot-password`, and a session-gated `/dashboard` route.
+- **`@notils/auth-ui`**: sign-in, sign-up, forgot-password, session-status,
+  and protected-route components, driven only by the auth contract — the
+  same components work unchanged if the provider behind them ever changes
+  (e.g. a future Better Auth provider).
+- **`@notils/form-builder`**: a recursive Zod-schema-to-form renderer for
+  Base UI (no existing library in the ecosystem targets Base UI — every
+  one found is Radix-coupled). Give it a schema, get a validated form —
+  including nested objects, arrays, discriminated unions, multi-column
+  `layout`, and per-field `uiHints` for conditional visibility or style
+  overrides. This is what renders the auth forms above, and is reusable for
+  any form in your project.
+- **Standalone scaffolds now fold in every internal library package**, not
+  just the UI kit — `api-client`, `auth-custom`, `auth-ui`, and
+  `form-builder` move into `src/lib/<package>/` with their imports and
+  dependencies merged automatically, the same way the UI kit already did.
+  Monorepo scaffolds needed no change — their existing package-rename
+  logic already generalizes to any package under `packages/*`.
+
 ## 0.1.1
 
 ### Fixed
