@@ -8,9 +8,11 @@
     ".": "./src/index.ts",
     "./specifiers": "./src/specifiers.ts",
     "./packages": "./src/packages.ts",
+    "./project-config": "./src/project-config.ts",
     "./filesystem": "./src/filesystem.ts"
   },
   "scripts": {
+    "check:detection": "bun run scripts/check-detection.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "lint:fix": "biome check . --write",

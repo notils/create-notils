@@ -6,6 +6,8 @@ import { cancel, intro, log, note, outro, spinner } from "@clack/prompts";
 import pc from "picocolors";
 import tiged from "tiged";
 
+import { writeProjectConfig } from "@notils/transform/project-config";
+
 import { generateApps } from "./apps.js";
 import { parseCli } from "./cli.js";
 import {
@@ -137,6 +139,21 @@ async function configureProject(
     // itself, so no separate resetRootMetadata is needed.
     await flattenToStandalone(projectRoot, config.projectName);
   }
+
+  // Record the shape/scope/paths for `@notils/cli add` (see
+  // docs/add-command-design.md). Written from the values we KNOW here, rather
+  // than leaving `add` to re-detect them later — detection exists for brownfield
+  // projects, and a scaffold shouldn't have to rely on it.
+  await writeProjectConfig(projectRoot, {
+    shape: config.projectType,
+    // A monorepo scaffold renames the `@notils/*` scope to its own (see above);
+    // standalone has no scope at all — everything resolves through `@/*`.
+    scope: config.projectType === "monorepo" ? `@${config.projectName}` : null,
+    // `lib`/`components` are the standalone fold targets. They're unused in a
+    // monorepo (where `add` writes a whole package under `packages/`), but kept
+    // as the scaffold's own defaults so the file has one shape in both cases.
+    paths: { packages: "packages", lib: "src/lib", components: "src/components" },
+  });
 
   await writeGeneratedReadme(projectRoot, {
     projectName: config.projectName,

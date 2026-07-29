@@ -16,6 +16,17 @@ export {
   resolveWithDependencies,
 } from "@notils/transform/packages";
 export {
+  CONFIG_FILE_NAME,
+  configPath,
+  type DetectionResult,
+  detectProjectConfig,
+  type NotilsConfig,
+  type ProjectPaths,
+  type ProjectShape,
+  readProjectConfig,
+  writeProjectConfig,
+} from "@notils/transform/project-config";
+export {
   rewriteLibrarySpecifier,
   rewriteScopeInSource,
   rewriteSpecifier,

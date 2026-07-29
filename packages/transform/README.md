@@ -14,10 +14,13 @@ in `PATHS_TO_STRIP`, so it never lands in a scaffolded project.
 
 ```
 src/
-├── packages.ts    # INTERNAL_PACKAGES graph, resolveWithDependencies()
-├── specifiers.ts  # the @notils/* → @/* rewrites (source, tree, and scope forms)
-├── filesystem.ts  # generic fs primitives (copy, read/write JSON, exists)
-└── index.ts       # public exports
+├── packages.ts        # INTERNAL_PACKAGES graph, resolveWithDependencies()
+├── specifiers.ts      # the @notils/* → @/* rewrites (source, tree, and scope forms)
+├── project-config.ts  # notils.json read/write + brownfield detection
+├── filesystem.ts      # generic fs primitives (copy, read/write JSON, exists)
+└── index.ts           # public exports
+scripts/
+└── check-detection.ts # detection checks — `bun run check:detection`
 ```
 
 ## Why it exists
@@ -69,3 +72,29 @@ The rewrite is **specifier-aware**: it only touches quoted module paths in
 import/export/require/CSS-`@import` position. Prose that mentions `@notils/ui` in
 a doc comment is left alone — the packages' own comments do exactly that, and
 rewriting them would be wrong.
+
+## `notils.json` and detection
+
+`add` needs to know the project's shape, scope, and paths.
+[project-config.ts](src/project-config.ts) handles both sources:
+
+- **Scaffolded projects** — `create-notils` calls `writeProjectConfig` with the
+  values it already knows, so nothing is inferred.
+- **Brownfield projects** — `detectProjectConfig` infers them. Monorepo is
+  `workspaces` + a `packages/` directory; the **scope comes from an actual
+  workspace package**, never the root name (this repo is named `create-notils`
+  at the root but scopes its packages `@notils/*` — inferring from the root name
+  gives the wrong answer). Standalone paths come from `tsconfig.json`'s `@/*`
+  alias, refined by `components.json` when present.
+
+Detection never throws. An undetectable project returns defaults plus
+`lowConfidence: true` and a `reasons[]` array explaining each inference, so `init`
+can show its work instead of asking the user to trust a silent guess.
+
+`tsconfig.json` is JSONC, so parsing strips comments with a small scanner rather
+than a regex — a naive `//`-stripping regex corrupts `"$schema": "https://…"`,
+which real tsconfigs all have. That bug happened; `check:detection` covers it.
+
+```bash
+cd packages/transform && bun run check:detection
+```
