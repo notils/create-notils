@@ -1,3 +1,11 @@
+import {
+  type Control,
+  Controller,
+  type FieldValues,
+  useFieldArray,
+  useWatch,
+} from "react-hook-form";
+
 import { isPrimitiveDescriptor, renderPrimitiveField } from "@notils/form-builder/field-renderer";
 import type { UiHints } from "@notils/form-builder/ui-hints";
 import type { FieldDescriptor } from "@notils/form-builder/walk-schema";
@@ -16,13 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@notils/ui/components/ui/select";
-import {
-  type Control,
-  Controller,
-  type FieldValues,
-  useFieldArray,
-  useWatch,
-} from "react-hook-form";
 
 /**
  * Dispatches one FieldDescriptor to its renderer: a primitive control

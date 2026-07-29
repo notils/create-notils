@@ -75,6 +75,27 @@ async function installDependencies(
 }
 
 /**
+ * Re-sort imports across the scaffolded project.
+ *
+ * Both shapes rewrite module specifiers after the template is fetched —
+ * standalone maps `@notils/ui/*` to `@/components/*` and `@notils/<lib>/*` to
+ * `@/lib/<lib>/*`; monorepo renames the `@notils/` scope to the project's own.
+ * Either rewrite changes how the specifiers sort, so imports that were ordered
+ * in the template no longer are, and the project would open with import-sort
+ * diagnostics on ~13 files. Biome's own sorter is the only correct implementation
+ * of the configured groups, so run it rather than reimplementing the ordering.
+ *
+ * Best-effort: requires the project's Biome devDependency, so this only runs
+ * after a successful install, and a failure never fails the scaffold.
+ */
+async function sortImports(projectRoot: string, packageManager: PackageManager): Promise<void> {
+  await runCommand(packageManager, ["run", "lint:fix"], {
+    workingDirectory: projectRoot,
+    useShell: process.platform === "win32",
+  });
+}
+
+/**
  * Apply every transform the scaffolded copy needs, in order. Kept as one small
  * function so the sequence reads top-to-bottom:
  *   strip internals → rebrand source → reset metadata → generate apps →
@@ -193,13 +214,28 @@ async function main(): Promise<void> {
   await configureProject(targetDirectory, config, cliVersion);
   progress.stop("Project configured");
 
+  let installed = false;
   if (config.installDependencies) {
     progress.start(`Installing dependencies with ${config.packageManager}`);
     try {
       await installDependencies(targetDirectory, config.packageManager);
+      installed = true;
       progress.stop("Dependencies installed");
     } catch (error) {
       progress.stop("Install failed — you can run it manually");
+      log.warn(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  // Needs the project's Biome, so only once install actually succeeded. Runs
+  // before git init so the initial commit already has sorted imports.
+  if (installed) {
+    progress.start("Sorting imports");
+    try {
+      await sortImports(targetDirectory, config.packageManager);
+      progress.stop("Imports sorted");
+    } catch (error) {
+      progress.stop("Import sort skipped — run lint:fix manually");
       log.warn(error instanceof Error ? error.message : String(error));
     }
   }

@@ -2,10 +2,11 @@
 
 import { useMemo } from "react";
 
+import { cva, type VariantProps } from "class-variance-authority";
+
 import { Label } from "@notils/ui/components/ui/label";
 import { Separator } from "@notils/ui/components/ui/separator";
 import { cn } from "@notils/ui/lib/utils";
-import { cva, type VariantProps } from "class-variance-authority";
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -190,6 +191,7 @@ function FieldError({
 
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
+        {/** biome-ignore lint/suspicious/noArrayIndexKey: Default */}
         {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
       </ul>
     );

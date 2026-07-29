@@ -14,7 +14,11 @@
     "ui:add": "shadcn add",
     "ui:diff": "shadcn add --diff",
     "ui:update": "shadcn@latest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write ."
   },
   "peerDependencies": {
     "react": "^19.0.0",

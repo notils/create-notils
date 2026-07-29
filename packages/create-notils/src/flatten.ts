@@ -178,10 +178,54 @@ async function inlineBiomeConfig(projectRoot: string): Promise<void> {
   // The shared config is a non-root, extendable preset. A standalone project
   // has a single root config, so mark it root and drop the extends indirection.
   const standaloneBiome = { ...sharedBiome, root: true };
+  // The monorepo sorts `@notils/*` workspace imports into their own group. A
+  // flattened project has none left (they became `@/*`), so drop that group and
+  // the negation that kept them out of :PACKAGE:, leaving no dead rules behind.
+  stripNotilsImportGroup(standaloneBiome);
   await writeTextFile(
     join(projectRoot, "apps/app/biome.json"),
     `${JSON.stringify(standaloneBiome, null, 2)}\n`
   );
+}
+
+/**
+ * Remove the `@notils/**` organizeImports group (and the `!@notils/**` negation
+ * on the :PACKAGE: group) from an inlined Biome config, plus the now-redundant
+ * :BLANK_LINE: separator that preceded the dropped group.
+ */
+function stripNotilsImportGroup(config: Record<string, unknown>): void {
+  const groups = (
+    config as {
+      assist?: {
+        actions?: { source?: { organizeImports?: { options?: { groups?: unknown } } } };
+      };
+    }
+  ).assist?.actions?.source?.organizeImports?.options?.groups;
+  if (!Array.isArray(groups)) return;
+
+  const kept: unknown[] = [];
+  for (const group of groups) {
+    if (Array.isArray(group)) {
+      // Drop both the `@notils/**` group itself and the negation that kept those
+      // specifiers out of :PACKAGE:.
+      const entries = group.filter((entry) => entry !== "@notils/**" && entry !== "!@notils/**");
+      // A group that held nothing but `@notils/**` disappears entirely — along
+      // with the blank-line separator before it, so we don't emit two in a row.
+      if (entries.length === 0) {
+        if (kept.at(-1) === ":BLANK_LINE:") kept.pop();
+        continue;
+      }
+      kept.push(entries);
+      continue;
+    }
+    kept.push(group);
+  }
+
+  (
+    config as {
+      assist: { actions: { source: { organizeImports: { options: { groups: unknown } } } } };
+    }
+  ).assist.actions.source.organizeImports.options.groups = kept;
 }
 
 type PackageJson = {

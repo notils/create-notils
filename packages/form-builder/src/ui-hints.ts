@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-import type { FieldDescriptor } from "@notils/form-builder/walk-schema";
 import type { Control, FieldValues } from "react-hook-form";
+
+import type { FieldDescriptor } from "@notils/form-builder/walk-schema";
 
 /**
  * Per-field rendering overrides, keyed by FieldDescriptor.path — the escape

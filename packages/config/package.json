@@ -6,6 +6,12 @@
   "keywords": [],
   "author": "Sanjay Kumar Sah",
   "license": "ISC",
+  "scripts": {
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write ."
+  },
   "exports": {
     "./tsconfig.base.json": "./tsconfig.base.json",
     "./tsconfig.nextjs.json": "./tsconfig.nextjs.json",

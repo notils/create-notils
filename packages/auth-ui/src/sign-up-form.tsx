@@ -1,9 +1,10 @@
 import { useState } from "react";
 
+import type { z } from "zod";
+
 import type { AuthContract } from "@notils/auth-custom/contract";
 import { SchemaForm } from "@notils/form-builder/schema-form";
 import { Alert, AlertDescription } from "@notils/ui/components/ui/alert";
-import type { z } from "zod";
 
 /** Tier 1 component — see sign-in-form.tsx for the AuthContract-driven design rationale. */
 export function SignUpForm<TUser, TSignIn, TSignUp>({

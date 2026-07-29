@@ -12,12 +12,13 @@ import type { z } from "zod";
 
 type SchemaOutput<TSchema extends z.ZodType> = z.infer<TSchema> & FieldValues;
 
+import type { Control } from "react-hook-form";
+
 import { DescriptorField } from "@notils/form-builder/descriptor-field";
 import type { UiHints } from "@notils/form-builder/ui-hints";
 import { type FieldDescriptor, walkSchema } from "@notils/form-builder/walk-schema";
 import { Button } from "@notils/ui/components/ui/button";
 import { FieldGroup } from "@notils/ui/components/ui/field";
-import type { Control } from "react-hook-form";
 
 /**
  * Groups TOP-LEVEL descriptors into rows: each entry in `layout` is one row

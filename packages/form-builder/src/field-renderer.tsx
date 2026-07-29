@@ -1,3 +1,5 @@
+import { type Control, Controller, type FieldValues } from "react-hook-form";
+
 import type { FieldDescriptor, PrimitiveFieldDescriptor } from "@notils/form-builder/walk-schema";
 import { Checkbox } from "@notils/ui/components/ui/checkbox";
 import {
@@ -16,7 +18,6 @@ import {
   SelectValue,
 } from "@notils/ui/components/ui/select";
 import { cn } from "@notils/ui/lib/utils";
-import { type Control, Controller, type FieldValues } from "react-hook-form";
 
 /**
  * Renders one PrimitiveFieldDescriptor as a @notils/ui-styled control, wired

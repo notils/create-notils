@@ -1,9 +1,10 @@
 import { useState } from "react";
 
+import { z } from "zod";
+
 import type { AuthContract } from "@notils/auth-custom/contract";
 import { SchemaForm } from "@notils/form-builder/schema-form";
 import { Alert, AlertDescription } from "@notils/ui/components/ui/alert";
-import { z } from "zod";
 
 const forgotPasswordSchema = z.object({ email: z.string().email() });
 

@@ -6,7 +6,11 @@
     "dev": "bun run --bun next dev --port 3000",
     "build": "bun run --bun next build",
     "start": "bun run --bun next start",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write ."
   },
   "dependencies": {
     "@notils/api-client": "workspace:*",

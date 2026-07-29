@@ -1,8 +1,9 @@
 "use client";
 
+import { z } from "zod";
+
 import { SchemaForm } from "@notils/form-builder/schema-form";
 import type { UiHints } from "@notils/form-builder/ui-hints";
-import { z } from "zod";
 
 /**
  * Replica of contact-form.tsx (an existing hand-built form from another

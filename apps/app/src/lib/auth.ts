@@ -1,10 +1,11 @@
 "use client";
 
+import { z } from "zod";
+
 import { createHttpClient } from "@notils/api-client/http";
 import type { CustomBackendAuthConfig } from "@notils/auth-custom/config";
 import { createCustomBackendAuthProvider } from "@notils/auth-custom/provider";
 import { createAuthContract } from "@notils/auth-custom/use-auth";
-import { z } from "zod";
 
 /**
  * Real end-to-end wiring of @notils/auth-custom against this project's own

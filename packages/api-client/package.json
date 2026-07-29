@@ -9,7 +9,11 @@
     "./auth/*": "./src/auth/*.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write ."
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
