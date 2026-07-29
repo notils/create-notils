@@ -122,6 +122,9 @@ integration, and it has zero external unknowns to de-risk.
 **Design is settled: [add-command-design.md](add-command-design.md).** Read it
 before starting; the decisions below are already made, not open.
 
+**Status: the core is BUILT and working** (`add`, `init`, `list`). Remaining
+items are unchecked at the end of this section.
+
 Rationale: needed before a second provider (Better Auth) is worth adding —
 without `add`, every provider has to be baked into the initial scaffold
 prompts, which doesn't scale and doesn't serve "add auth to a project I
@@ -135,41 +138,53 @@ Settled decisions: a **separate published `@notils/cli`** package run via
 writes for brownfield; **reuse the flatten transform** for standalone targets
 rather than a prebuilt registry.
 
-- [ ] **Extract the shared transform first** — `rewriteUiSpecifier`,
-      `rewriteLibrarySpecifier`, `rewriteSpecifiersInSource`/`InTree` are
-      currently private to `packages/create-notils/src/flatten.ts`. Move them to
-      a shared internal package both CLIs consume (`packages/transform`). Do NOT
-      make `@notils/cli` depend on the scaffolder — that's backwards. This is a
-      prerequisite, not a cleanup.
-- [ ] `packages/cli` (`@notils/cli`) skeleton + its own release pipeline.
-- [ ] `notils.json`: schema, written by `create-notils` at scaffold time.
-- [ ] `init` — detect shape (`packages/` + `workspaces` → monorepo; scope from
-      root `name`; paths probed from `tsconfig.json` aliases / `components.json`),
-      confirm, persist.
-- [ ] `add <name>` core: fetch `packages/<name>` from the pinned tag, then
-      either write to `packages/<name>/` + rename scope (monorepo) or
-      rewrite-and-fold into `src/lib/<name>/` (standalone).
-- [ ] **Transitive dep resolution** — `auth-ui` → `auth-custom` → `api-client`,
-      plus `form-builder` → `ui`, so one `add auth-ui` pulls five packages.
-      Resolve the closure, report it, confirm before writing.
-- [ ] **Don't clobber modified files.** Detect an existing copy the user has
-      edited and offer a diff (as `ui:diff` already does) instead of
-      overwriting. Everything we write is their source and they're invited to
-      edit it.
-- [ ] Merge external deps into the target `package.json` resolving latest — no
-      hand-pinned versions.
-- [ ] Run the project's formatter on what was written (same reason
-      `create-notils` now has `sortImports`: rewriting specifiers changes their
-      sort order).
-- [ ] **Brownfield compatibility checks** — Tailwind v4 CSS-first, the theme
-      token layer, Base UI vs an existing Radix shadcn install, React 19/Next 16
-      peers. Degrade to a clear incompatibility report; never write a project
-      that won't compile.
-- [ ] `list` — what's available, what's installed, and version drift vs the
-      CLI's pinned tag.
+- [x] **Extracted the shared transform** into `packages/transform` (private,
+      bundled into each CLI via tsup `noExternal`). `INTERNAL_PACKAGES` there is
+      now the single place packages are enumerated — `LIBRARY_PACKAGE_NAMES` and
+      the scaffold's fold step derive from it. Verified behavior-preserving:
+      flattening a tree copy with the extracted code produces a byte-identical
+      `src/` to pre-extraction.
+- [x] `packages/cli` (`@notils/cli`), bin `notils`.
+- [x] `notils.json` — schema + `writeProjectConfig`, written by `create-notils`
+      at scaffold time from values it already knows.
+- [x] `init` — detects shape/scope/paths, shows its reasoning line by line, lets
+      the user correct every value (`--yes` accepts). **Scope is read from an
+      actual workspace package, not the root name** — this repo is named
+      `create-notils` but scopes its packages `@notils/*`, so root-name
+      inference is wrong. 9 fixtures in
+      `packages/transform/scripts/check-detection.ts`.
+- [x] `add <name>` core — fetches `packages/<name>` from the pinned tag via
+      tiged's subdirectory support, then writes to `packages/<name>/` with the
+      scope renamed (monorepo) or folds into `src/lib/<name>/` with `@/*`
+      specifiers (standalone).
+- [x] **Transitive dep resolution** — `add auth-ui` writes five packages,
+      dependency-first, reported before writing.
+- [x] **Don't clobber modified files** — every file is compared against the
+      pristine upstream source; `modified` files are reported and skipped unless
+      `--force`. Verified: a local edit survives a re-run, and `--force`
+      replaces it.
+- [x] External deps — **reports** the install command rather than writing
+      versions. Monorepo manifests are *generated* (name/exports/type kept,
+      internal deps as `workspace:*` under the project's scope, peer ranges
+      kept as genuine compatibility statements) so no pinned range from our
+      monorepo leaks into a user's project.
+- [x] Post-write formatting via the project's own `lint:fix`/`format` script
+      (`--skip-format` opts out); silent when the project has neither.
+- [x] **Brownfield compatibility checks** — Tailwind missing/v3, absent theme
+      tokens, an existing Radix install, React < 19. Warnings with remedies, run
+      before the confirmation *and* before the dry-run exit. Verified to fire on
+      a hostile fixture and stay silent on a compatible one.
+- [x] `list` — available/installed with real target paths.
+- [ ] Version-drift reporting in `list` (needs a record of which tag each
+      package came from).
+- [ ] `add ui` theme-token injection — it currently *warns* when the project has
+      no `--primary` token layer rather than writing one. Writing into someone's
+      `globals.css` is a bigger decision than copying files; decide whether to
+      offer it behind a prompt.
 - [ ] Decide the versioning question left open in the design doc: does `add`
-      fetch the CLI's own version's tag, or latest? (Leaning: pin to CLI
-      version, surface drift in `list`.)
+      fetch the CLI's own version's tag, or latest? (Currently a `TEMPLATE_REF`
+      constant pinned to `v0.2.0`, overridable via `NOTILS_TEMPLATE_REF`.
+      Leaning: pin to CLI version, surface drift in `list`.)
 
 ## Then: Better Auth provider
 

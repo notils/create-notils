@@ -4,8 +4,21 @@ How a capability (`ui`, `form-builder`, `auth-custom`, `auth-ui`, …) gets into
 project **after** it was created — whether that project was scaffolded by
 `create-notils` or written by someone who has never heard of it.
 
-Status: **DESIGN, NOT YET BUILT.** Nothing described here exists in code. See
-[ROADMAP.md](ROADMAP.md) for sequencing.
+Status: **BUILT** — `add`, `init`, and `list` all work; see
+[`packages/cli`](../packages/cli). This document records the *reasoning*; for
+per-item status and what's still open, see [ROADMAP.md](ROADMAP.md).
+
+Two things turned out differently from the design below, both discovered by
+running it rather than reading it:
+
+1. **Monorepo targets need a generated `package.json`/`tsconfig.json`.** The
+   design said to skip manifests to avoid propagating pinned versions — but a
+   workspace package without a manifest simply doesn't resolve, so every
+   rewritten import breaks. They're now *rebuilt* instead: structure kept,
+   versions dropped.
+2. **External dependencies are reported, not merged.** "Merge into the target's
+   package.json resolving latest" would mean this CLI choosing version ranges,
+   against the never-hand-pin rule. It prints the install command instead.
 
 ## The problem
 

@@ -33,17 +33,19 @@ create-notils/
 │   ├── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
 │   ├── form-builder/           # @notils/form-builder — recursive Zod-schema-to-form renderer (Base UI)
 │   ├── auth-ui/                # @notils/auth-ui — Tier 1 auth UI (SignInForm, SignUpForm, ...), AuthContract-driven
-│   └── create-notils/          # the published scaffolder CLI (stripped from scaffolds)
+│   ├── create-notils/          # the published scaffolder CLI (`npm create notils`)
+│   ├── cli/                    # @notils/cli — the published `add`/`init`/`list` CLI
+│   └── transform/              # @notils/transform — shared internals for both CLIs
 ├── biome.json                  # root Biome (extends @notils/config/biome.json)
 ├── turbo.json                  # Turborepo pipeline
 └── package.json                # workspaces (apps/*, packages/*) + root scripts
 ```
 
-Two more packages are **planned, not yet created** (see "The `add` command"
-below): `packages/transform` (the specifier-rewrite helpers extracted out of
-`create-notils/src/flatten.ts` so both CLIs can share them) and `packages/cli`
-(`@notils/cli`, the `add` command). Everything under `packages/*` EXCEPT the two
-CLI packages is template source that ships to scaffolded projects.
+**Everything under `packages/*` EXCEPT `create-notils`, `cli`, and `transform` is
+template source that ships to scaffolded projects.** Those three are tooling and
+are listed in `PATHS_TO_STRIP`. `transform` is private and never published —
+each CLI inlines it via tsup `noExternal` (see "The `add` command" below for why
+that matters).
 
 ## Non-negotiable setup decisions (do NOT revert without strong reason)
 
@@ -362,41 +364,51 @@ not to re-discover:
    checking a config field's value (e.g. `devEngines`) is not enough; it
    caught neither bug here.
 
-## The `add` command (`@notils/cli`) — DESIGNED, NOT YET BUILT
+## The `add` command (`@notils/cli`) — BUILT
 
-Full design: [`docs/add-command-design.md`](../../../docs/add-command-design.md).
-Read it before writing any of it. The decisions that constrain work elsewhere:
+Design/rationale: [`docs/add-command-design.md`](../../../docs/add-command-design.md).
+Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
+[`packages/cli/README.md`](../../../packages/cli/README.md).
 
-- **It's a SEPARATE published package, `@notils/cli`, run via `bunx` and never
-  installed into the target project.** Stateless, so a fix reaches every
-  project including ones scaffolded months ago; no dependency for a brownfield
-  dev to add before their first `add`. Rejected: vendoring a copy into each
-  scaffold (freezes at scaffold time, can't serve brownfield at all), a
-  devDependency (worse first touch), and a `create-notils add` subcommand.
+`add`, `init`, and `list` all work. Bin name is `notils`
+(`bunx @notils/cli add auth-ui`). The properties below are load-bearing — don't
+"simplify" them away:
+
+- **It's a SEPARATE published package, never installed into the target
+  project.** Stateless, so a fix reaches every project including ones
+  scaffolded months ago; no dependency for a brownfield dev to add before their
+  first `add`. Rejected: vendoring a copy into each scaffold (freezes at
+  scaffold time, can't serve brownfield at all), a devDependency (worse first
+  touch), and a `create-notils add` subcommand.
 - **The primary target is a BROWNFIELD project** — someone else's existing
-  Next.js repo, not one of our scaffolds. That's the harder constraint and it
-  drives the design; a tool that only works in our own scaffolds is just a
-  scaffolder feature. Consequence: `add` must detect shape/scope/paths when its
-  config file is absent, and must check the foundations it can't assume
-  (Tailwind v4 CSS-first, the theme token layer, Base UI vs Radix, React 19)
-  and degrade to a clear incompatibility report rather than writing a broken
-  project.
-- **Standalone output reuses the flatten transform**, not a prebuilt registry —
-  same "monorepo is the single source" rule as the scaffold. **This forces a
-  refactor first:** `rewriteUiSpecifier`/`rewriteLibrarySpecifier` and friends
-  are currently private to `packages/create-notils/src/flatten.ts` and must move
-  to a shared internal package both CLIs consume. Extract the shared package;
-  don't make `@notils/cli` depend on the scaffolder (backwards).
-- **Dependency resolution is mandatory, not a nicety.** The graph is real —
-  `auth-ui` → `auth-custom` → `api-client`, plus `form-builder` → `ui` — so
-  `add auth-ui` pulls five packages. Resolve the transitive closure, confirm
-  before writing, and **detect a modified existing copy rather than clobbering
-  it** (everything we write is the user's source and they're invited to edit
-  it — offer a diff, as `ui:diff` already does).
-- **`add` must sort imports after writing**, for the same reason
-  `create-notils` now does (see the CLI section above): rewriting specifiers
-  changes their sort order, so freshly-added files otherwise open with
-  import-sort diagnostics.
+  Next.js repo, not one of our scaffolds. A tool that only works in our own
+  scaffolds is just a scaffolder feature. Hence `init`'s detection, and
+  `compat.ts`'s foundation checks (Tailwind missing/v3, no theme tokens, an
+  existing Radix install, React < 19) which **warn with remedies rather than
+  refuse** — the user may be mid-migration. They run before the confirmation
+  AND before the dry-run exit; a dry run is exactly when you want to hear them.
+- **Both shapes reuse `@notils/transform`**, never a prebuilt registry — the
+  same "monorepo is the single source" rule. A project built by `add` therefore
+  can't drift from one built by the scaffolder.
+- **Never clobber a modified file.** Every file is compared against the pristine
+  upstream source; `modified` files are reported and skipped unless `--force`.
+  Everything we write is the user's source and they're invited to edit it, so
+  silently overwriting would be a data-loss bug. Verified both directions.
+- **Monorepo manifests are GENERATED, not copied** (`manifestFilesFor` in
+  `write-package.ts`). A workspace package is non-functional without a
+  `package.json` — `@scope/ui` won't resolve and every rewritten import breaks —
+  but copying ours would propagate our pinned ranges into the user's project.
+  So: keep name/exports/type, internal deps become `workspace:*` under the
+  project's scope, peer ranges are kept (they're compatibility statements, not
+  pins we chose), and external deps are omitted and **reported** as an install
+  command instead. This gap (src/ written, no manifest) was a real bug found by
+  running it, not reading it — don't reintroduce it.
+- **`add` sorts imports after writing**, via the project's own
+  `lint:fix`/`format` script, for the same reason `create-notils` does:
+  rewriting specifiers changes their sort order.
+
+Known gaps, deliberately: `add ui` warns rather than writing a theme-token layer
+into someone's `globals.css`; `list` has no version-drift column yet.
 
 ## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 
@@ -459,15 +471,12 @@ does auth" are both real, common cases that need different generated code.
   shadcn variant likely assumes Radix; this repo is on Base UI (see "Base UI
   vs Radix" above) — may need re-porting its components rather than dropping
   them in directly.
-- **The `add` command** — NOT YET BUILT, but **designed**: see
-  [`docs/add-command-design.md`](../../../docs/add-command-design.md). Ships as
-  a **separate `@notils/cli` package**, run via `bunx` and never installed into
-  the target project — NOT a subcommand on `create-notils` (npm's `create-*`
-  convention is for scaffolders, and `create-notils add` reads wrong for an
-  existing project). Needed before a second auth provider is worth building, so
-  it's sequenced before the Better Auth provider. Read that doc before writing
-  any of it; the three decisions that constrain other work are summarized in
-  "The `add` command" below.
+- **The `add` command** — **BUILT** as a separate `@notils/cli` package (bin
+  `notils`), run via `bunx` and never installed into the target project. It was
+  sequenced ahead of the Better Auth provider precisely so that provider has a
+  delivery mechanism to ship through; that dependency is now satisfied. See
+  "The `add` command (`@notils/cli`) — BUILT" above for the properties that
+  matter when changing it.
 
 ## Roadmap — PLANNED, NOT YET BUILT
 

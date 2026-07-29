@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cancel, intro, log, outro } from "@clack/prompts";
+import { cancel, intro, outro } from "@clack/prompts";
 import pc from "picocolors";
 
+import { runAdd } from "./add.js";
 import { parseCli } from "./cli.js";
 import { CancelledError, runInit } from "./init.js";
 import { runList } from "./list.js";
@@ -42,15 +43,8 @@ async function main(): Promise<void> {
       break;
 
     case "add":
-      log.warn(
-        `${pc.bold("add")} is not implemented yet — see docs/add-command-design.md for the design.`
-      );
-      log.message(
-        pc.dim(
-          `Requested: ${parsed.packages.join(", ")}${parsed.options.dryRun ? " (dry run)" : ""}`
-        )
-      );
-      outro(pc.dim("Nothing was written."));
+      await runAdd(projectRoot, parsed.packages, parsed.options);
+      outro(pc.green("Done."));
       break;
   }
 }
