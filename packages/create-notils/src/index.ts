@@ -6,6 +6,7 @@ import { cancel, intro, log, note, outro, spinner } from "@clack/prompts";
 import pc from "picocolors";
 import tiged from "tiged";
 
+import { runCommand } from "@notils/transform/process";
 import { writeProjectConfig } from "@notils/transform/project-config";
 
 import { generateApps } from "./apps.js";
@@ -20,7 +21,6 @@ import { replaceInDirectoryTree } from "./filesystem.js";
 import { flattenToStandalone } from "./flatten.js";
 import { initializeGitRepository } from "./git.js";
 import { resetRootMetadata } from "./metadata.js";
-import { runCommand } from "./process.js";
 import { writeGeneratedReadme } from "./readme.js";
 import {
   alignPackageManagerField,

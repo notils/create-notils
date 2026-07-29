@@ -1,0 +1,60 @@
+{
+  "name": "@notils/cli",
+  "version": "0.1.0",
+  "description": "Add production-ready capabilities (UI kit, auth, form-builder) to any Next.js project — scaffolded with create-notils or your own.",
+  "type": "module",
+  "bin": {
+    "notils": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Sanjay Kumar Sah",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/notils/create-notils",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "nextjs",
+    "shadcn",
+    "base-ui",
+    "tailwind",
+    "auth",
+    "forms",
+    "zod",
+    "cli",
+    "codegen"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write .",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.6.0",
+    "@notils/transform": "workspace:*",
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1",
+    "tiged": "^2.12.8"
+  },
+  "devDependencies": {
+    "@notils/config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

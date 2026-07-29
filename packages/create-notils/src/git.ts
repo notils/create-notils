@@ -1,4 +1,4 @@
-import { tryRunCommand } from "./process.js";
+import { tryRunCommand } from "@notils/transform/process";
 
 const INITIAL_COMMIT_MESSAGE = "Initial commit from create-notils";
 

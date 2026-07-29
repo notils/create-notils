@@ -110,6 +110,26 @@ const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 }
 
 // ---------------------------------------------------------------------------
+// 3b. Root-level alias: an app-router project with app/ at the root and no src/
+//     aliases `@/*` to `./*`. Stripping only a trailing "/*" leaves a literal
+//     "*", producing paths like "*&#47;lib" — a real brownfield project hit this.
+// ---------------------------------------------------------------------------
+for (const target of ["./*", "*"]) {
+  const root = await fixture("root-alias");
+  await writeJson(join(root, "package.json"), { name: "root-aliased" });
+  await writeJson(join(root, "tsconfig.json"), {
+    compilerOptions: { paths: { "@/*": [target] } },
+  });
+  const { config } = await detect(`root-level alias "@/*" → "${target}"`, root);
+  check(`lib has no glob (${target})`, config.paths.lib === "lib", `got ${config.paths.lib}`);
+  check(
+    `components has no glob (${target})`,
+    config.paths.components === "components",
+    `got ${config.paths.components}`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4. Brownfield with nothing to go on — must not throw, must flag low confidence.
 // ---------------------------------------------------------------------------
 {

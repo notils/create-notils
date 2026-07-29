@@ -9,6 +9,7 @@
     "./specifiers": "./src/specifiers.ts",
     "./packages": "./src/packages.ts",
     "./project-config": "./src/project-config.ts",
+    "./process": "./src/process.ts",
     "./filesystem": "./src/filesystem.ts"
   },
   "scripts": {

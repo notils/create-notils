@@ -1,6 +1,8 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { getCommandOutput } from "@notils/transform/process";
+
 import type { PackageManager } from "./config.js";
 import {
   readJsonFile,
@@ -9,7 +11,6 @@ import {
   writeJsonFile,
   writeTextFile,
 } from "./filesystem.js";
-import { getCommandOutput } from "./process.js";
 
 // The template is the create-notils repository itself, pinned to a release tag
 // for reproducible scaffolds. Bump this when cutting a new template release.

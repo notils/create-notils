@@ -166,11 +166,20 @@ function workspaceGlobs(pkg: RootPackageJson): string[] {
 
 /**
  * Turn an alias target into a directory path relative to the project root.
- * `"@/*": ["./src/*"]` → `src`; a `components.json` alias `"@/components"`
- * combined with that base → `src/components`.
+ * Returns "" for a target that resolves to the root itself.
+ *
+ *   "./src/*" → "src"
+ *   "./*"     → ""        (a Next.js app with app/ at the root, no src/)
+ *   "*"       → ""
+ *
+ * The root case matters: an app-router project without `src/` aliases `@/*` to
+ * `./*`, and stripping only a trailing "/*" leaves a literal "*" that ends up in
+ * paths like "*&#47;lib". Real brownfield projects hit this.
  */
 function aliasTargetToDirectory(target: string): string {
-  return target.replace(/^\.\//, "").replace(/\/\*$/, "").replace(/\/$/, "");
+  const withoutPrefix = target.replace(/^\.\//, "");
+  const withoutGlob = withoutPrefix.replace(/\/?\*+$/, "");
+  return withoutGlob.replace(/\/$/, "");
 }
 
 /**

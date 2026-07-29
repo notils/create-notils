@@ -16,6 +16,12 @@ export {
   resolveWithDependencies,
 } from "@notils/transform/packages";
 export {
+  getCommandOutput,
+  type RunCommandOptions,
+  runCommand,
+  tryRunCommand,
+} from "@notils/transform/process";
+export {
   CONFIG_FILE_NAME,
   configPath,
   type DetectionResult,
