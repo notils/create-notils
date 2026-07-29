@@ -1,0 +1,25 @@
+{
+  "name": "@notils/transform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared specifier-rewrite + shape helpers used by both create-notils (scaffold time) and @notils/cli (add time).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./specifiers": "./src/specifiers.ts",
+    "./packages": "./src/packages.ts",
+    "./filesystem": "./src/filesystem.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome check . --write",
+    "lint:unsafe": "biome check . --write --unsafe",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@notils/config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "typescript": "^6.0.3"
+  }
+}

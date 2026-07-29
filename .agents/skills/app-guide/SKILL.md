@@ -1,11 +1,11 @@
 ---
 name: app-guide
-description: Conventions and architecture for a project scaffolded with create-notils (monorepo OR standalone). READ THIS before adding or editing code — especially before touching UI components, Tailwind theming, or the project layout.
+description: Conventions and architecture for a project scaffolded with create-notils (monorepo OR standalone). READ THIS before adding or editing code — especially before touching UI components, Tailwind theming, the auth stack (api-client, auth-custom, auth-ui), the schema-to-form renderer (form-builder), or the project layout.
 ---
 
 # Project guide
 
-This project was scaffolded with **create-notils** — an opinionated, production-first starter. Stack: Bun + Next.js 16 (App Router, React Compiler) + Tailwind CSS v4 + shadcn/ui on Base UI + Biome (and Turborepo if this is the monorepo shape). Everything here is **your code** — edit it freely; there is no vendor lock-in.
+This project was scaffolded with **create-notils** — an opinionated, production-first starter. Stack: Bun + Next.js 16 (App Router, React Compiler) + Tailwind CSS v4 + shadcn/ui on Base UI + Biome (and Turborepo if this is the monorepo shape), plus an auth stack and a Zod-schema-to-form renderer. Everything here is **your code** — edit it freely; there is no vendor lock-in.
 
 This guide is the source of truth for how the project is wired. Follow it so the codebase stays consistent.
 
@@ -26,11 +26,15 @@ The **component source, theme, `cn()`, and conventions are identical in both** �
 ├── apps/app/src/app/       # Next.js app (routes; globals.css imports the shared theme)
 ├── packages/
 │   ├── config/             # shared tsconfig.* + biome.json
-│   └── ui/src/             # shared shadcn/ui kit
-│       ├── components/ui/  #   components (button, ...)
-│       ├── lib/utils.ts    #   cn()
-│       ├── hooks/
-│       └── styles/globals.css  # canonical theme
+│   ├── ui/src/             # shared shadcn/ui kit
+│   │   ├── components/ui/  #   components (button, ...)
+│   │   ├── lib/utils.ts    #   cn()
+│   │   ├── hooks/
+│   │   └── styles/globals.css  # canonical theme
+│   ├── api-client/         # HTTP transport core (createHttpClient, HttpError)
+│   ├── auth-custom/        # auth provider for your own backend
+│   ├── auth-ui/            # SignInForm, SignUpForm, ProtectedRoute, ...
+│   └── form-builder/       # Zod schema → form renderer
 ├── turbo.json              # Turborepo pipeline
 └── package.json            # workspaces + root scripts
 ```
@@ -42,12 +46,19 @@ The **component source, theme, `cn()`, and conventions are identical in both** �
 │   ├── app/                # Next.js app (routes)
 │   │   └── globals.css     #   the theme (tokens + dark mode) lives here
 │   ├── components/ui/      # components (button, ...)
-│   ├── lib/utils.ts        # cn()
+│   ├── lib/
+│   │   ├── utils.ts        #   cn()
+│   │   ├── api-client/     #   HTTP transport core
+│   │   ├── auth-custom/    #   auth provider for your own backend
+│   │   ├── auth-ui/        #   SignInForm, SignUpForm, ProtectedRoute, ...
+│   │   └── form-builder/   #   Zod schema → form renderer
 │   └── hooks/
 ├── components.json         # shadcn CLI config (aliases → @/*)
 ├── biome.json
 └── package.json            # single project
 ```
+
+In the monorepo each of those is a workspace package imported by scoped name (`@<scope>/form-builder/schema-form`); in standalone they're folded into `src/lib/` and imported via `@/lib/form-builder/schema-form`. Same source either way.
 
 **Import the UI kit** — monorepo: `@<scope>/ui/components/ui/button` (check `package.json` `name` for the scope). standalone: `@/components/ui/button`. Below, this is written as **the ui import**.
 
@@ -98,6 +109,78 @@ Components are source files in your repo, so **adding and updating are the same 
 
 Default icon library is **lucide** (`iconLibrary` in `components.json`). To switch: change `iconLibrary` (e.g. `tabler`, `hugeicons`), `bun add` that library, and update imports. One config line — no lock-in.
 
+## Forms — the schema-to-form renderer
+
+A Zod schema is the single source of truth for a form's fields, validation, and layout. `<SchemaForm/>` walks the schema and renders it — you don't hand-write field markup.
+
+**Import** — monorepo: `@<scope>/form-builder/schema-form`; standalone: `@/lib/form-builder/schema-form`.
+
+```tsx
+const contactSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  email: z.string().email(),
+  message: z.string().min(10, "Tell us a bit more"),
+});
+
+<SchemaForm
+  schema={contactSchema}
+  onSubmit={async (values) => { /* values is fully typed from the schema */ }}
+  submitLabel="Send"
+  layout={[["firstName", "lastName"], ["email"]]}
+/>
+```
+
+- **It recurses.** Nested objects, arrays (via `useFieldArray`), discriminated unions (rendered as a variant picker), and enums all work without extra code. Add a field to the schema and it appears.
+- **`layout`** groups **top-level** fields into rows — `[["firstName","lastName"]]` puts those two side by side. Unmentioned fields get their own full-width row, in schema order, after the laid-out ones. Nested fields keep their own vertical layout regardless.
+- **`uiHints`** — per-field overrides keyed by field path: `showWhen` for conditional visibility, `className` for style tweaks, or a full custom render. Use this before reaching for a hand-built form.
+- **Cross-field validation needs no `uiHints`.** A Zod `.superRefine()` that calls `ctx.addIssue({ path })` already surfaces on the right field.
+- **Validation messages come from the schema.** Put them in the Zod definition (`.min(10, "Tell us a bit more")`), not in the component.
+- **Extending it:** `walkSchema` (schema → descriptor tree) has zero React/UI dependency; `field-renderer.tsx` is the swappable half that picks actual components. To change how a field type renders, edit the renderer — not `SchemaForm`.
+
+## Auth
+
+Auth is a **contract with swappable providers**, not one hardcoded integration. The scaffolded provider is the **custom-backend** one: for a project that already has its own auth API.
+
+Three pieces — monorepo `@<scope>/…`, standalone `@/lib/…`:
+
+- **`api-client`** — the HTTP transport (`createHttpClient`, `HttpError`). Platform-neutral; no browser-only or Node-only APIs.
+- **`auth-custom`** — the provider. `createCustomBackendAuthProvider` (token storage + single-flight refresh) and `createAuthContract` (the `useSession`/`signIn`/`signUp`/`signOut`/`requestPasswordReset` surface).
+- **`auth-ui`** — `SignInForm`, `SignUpForm`, `ForgotPasswordForm`, `SessionStatus`, `ProtectedRoute`. Built on `SchemaForm`; driven only by the contract, so they're identical regardless of provider.
+
+**Wiring it to your backend** — the scaffold ships a working example at `src/lib/auth.ts` (monorepo: `apps/app/src/lib/auth.ts`) pointed at mock in-memory API routes. **There are no assumed defaults**: every endpoint path and every request/response shape is a Zod schema you supply. To use your real backend, change the paths and schemas in that one file; nothing else is project-specific.
+
+```ts
+// One config object drives everything — every path and schema is explicit.
+const authConfig: CustomBackendAuthConfig<User, SignIn, SignUp> = {
+  loginPath: "/api/auth/login",        // ← your endpoints
+  registerPath: "/api/auth/register",
+  refreshPath: "/api/auth/refresh",
+  sessionPath: "/api/auth/session",
+  loginResponseSchema: tokenEnvelope,  // ← your actual response shapes
+  sessionResponseSchema: userSchema,
+  signInInputSchema,                   // ← your input shapes
+  signUpInputSchema,
+  storage,                             // ← where tokens live
+};
+
+const anonymousHttp = createHttpClient({ baseUrl, apiPrefix: "" });
+const authProvider = createCustomBackendAuthProvider(authConfig, anonymousHttp);
+const authedHttp = createHttpClient({ baseUrl, apiPrefix: "", auth: authProvider });
+
+export const auth = createAuthContract(authConfig, anonymousHttp, authedHttp);
+```
+
+Note the **two** clients: `anonymousHttp` for login/register/refresh (no token yet) and `authedHttp` for authenticated calls (attaches the token, refreshes on 401). The provider bridges them.
+
+The two failure classes are handled **differently on purpose** — don't "fix" this by unifying them:
+- A **`ZodError`** (response doesn't match your schema) **throws**. That's a bug in the schema or the backend, to fix, not a runtime state to swallow.
+- An **`HttpError`** (network failure, wrong password) is **caught** and returned as an `AuthResult`.
+
+**`ProtectedRoute` deliberately does not redirect.** It gates children on session status and calls an `onUnauthenticated` callback — routing is `next/navigation`'s job, kept out of the component so the package stays framework-agnostic. Wire the redirect yourself.
+
+**Not included:** 2FA, passkeys, SSO, magic links, and orgs. Those are provider-specific and a custom backend usually doesn't implement them the same way, if at all.
+
 ## Theming
 
 The theme is the **single source of truth** for the palette (Tailwind v4, CSS-first — there is no `tailwind.config.js`). It lives in the ui package's `styles/globals.css` (monorepo) or directly in `src/app/globals.css` (standalone).
@@ -138,7 +221,7 @@ Aim for a polished, production-looking result — not a toy demo.
 ## Verifying changes
 
 - `bun run typecheck` (monorepo: all workspaces via Turbo; standalone: the project).
-- `bun run lint` (Biome). `bun run lint:fix` to auto-fix + sort imports.
+- `bun run lint` (Biome). `bun run lint:fix` to auto-fix + sort imports. **In the monorepo, a package with no `lint` script is silently skipped** by the Turbo task — if you add a package, give it `lint`/`lint:fix` scripts or it never gets linted.
 - `bun run build` — the real check after any change to components, theming, or Base UI wiring; a typecheck alone won't catch a Tailwind `@source` / CSS-compile issue.
 
 ## A note on Next.js 16

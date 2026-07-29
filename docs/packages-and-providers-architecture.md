@@ -39,7 +39,8 @@ They're separate axes:
   backend / Clerk / Supabase / ...). Swappable, and the set grows over time.
 - **Delivery mechanism** — *when/how* the code enters the project (chosen at
   `bunx create-notils` scaffold time, vs. added later via
-  `bunx create-notils add <name>`). Same package, two entry points.
+  `bunx @notils/cli add <name>`). Same package source, two entry points — two
+  separate CLIs, see [add-command-design.md](add-command-design.md).
 
 This mirrors the existing monorepo/standalone split in
 [cli-monorepo-vs-standalone.md](cli-monorepo-vs-standalone.md): one
@@ -152,13 +153,14 @@ Add authentication?        (No / Better Auth / Custom backend)
                             Base URL? (can be filled in later)
 ```
 
-**After the fact** (`bunx create-notils add <name>`), inside an existing
-`create-notils` project:
+**After the fact** (`bunx @notils/cli add <name>`) — inside an existing
+project, which **need not be one we scaffolded**; the brownfield case is the
+primary target. Full design: [add-command-design.md](add-command-design.md).
 
 ```
-bunx create-notils add auth              # prompts provider, same as above
-bunx create-notils add auth:better-auth  # skip the provider prompt
-bunx create-notils add auth:custom       # skip straight to custom-backend prompts
+bunx @notils/cli add auth              # prompts provider, same as above
+bunx @notils/cli add auth:better-auth  # skip the provider prompt
+bunx @notils/cli add auth:custom       # skip straight to custom-backend prompts
 ```
 
 `add` must detect project shape (monorepo vs. standalone, from the same

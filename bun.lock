@@ -94,6 +94,7 @@
       },
       "dependencies": {
         "@clack/prompts": "^1.6.0",
+        "@notils/transform": "workspace:*",
         "commander": "^15.0.0",
         "picocolors": "^1.1.1",
         "tiged": "^2.12.8",
@@ -122,6 +123,15 @@
       },
       "peerDependencies": {
         "react": "^19.0.0",
+      },
+    },
+    "packages/transform": {
+      "name": "@notils/transform",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@notils/config": "workspace:*",
+        "@types/node": "^24.13.3",
+        "typescript": "^6.0.3",
       },
     },
     "packages/ui": {
@@ -405,6 +415,8 @@
     "@notils/config": ["@notils/config@workspace:packages/config"],
 
     "@notils/form-builder": ["@notils/form-builder@workspace:packages/form-builder"],
+
+    "@notils/transform": ["@notils/transform@workspace:packages/transform"],
 
     "@notils/ui": ["@notils/ui@workspace:packages/ui"],
 

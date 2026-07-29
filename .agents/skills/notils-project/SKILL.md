@@ -32,16 +32,26 @@ create-notils/
 │   ├── api-client/             # @notils/api-client — platform-neutral HTTP transport core
 │   ├── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
 │   ├── form-builder/           # @notils/form-builder — recursive Zod-schema-to-form renderer (Base UI)
-│   └── auth-ui/                # @notils/auth-ui — Tier 1 auth UI (SignInForm, SignUpForm, ...), AuthContract-driven
+│   ├── auth-ui/                # @notils/auth-ui — Tier 1 auth UI (SignInForm, SignUpForm, ...), AuthContract-driven
+│   └── create-notils/          # the published scaffolder CLI (stripped from scaffolds)
 ├── biome.json                  # root Biome (extends @notils/config/biome.json)
 ├── turbo.json                  # Turborepo pipeline
 └── package.json                # workspaces (apps/*, packages/*) + root scripts
 ```
 
+Two more packages are **planned, not yet created** (see "The `add` command"
+below): `packages/transform` (the specifier-rewrite helpers extracted out of
+`create-notils/src/flatten.ts` so both CLIs can share them) and `packages/cli`
+(`@notils/cli`, the `add` command). Everything under `packages/*` EXCEPT the two
+CLI packages is template source that ships to scaffolded projects.
+
 ## Non-negotiable setup decisions (do NOT revert without strong reason)
 
 1. **Package manager is Bun** (`devEngines.packageManager: bun`). Use `bun`, `bun add`, `bunx` — never npm/pnpm/yarn in this repo. Bun installs deps **per-package** (into `packages/<pkg>/node_modules`), not hoisted, and symlinks workspace packages into the root `node_modules/@notils/`.
-2. **Linting/formatting is Biome, NOT ESLint/Prettier.** Config in `@notils/config/biome.json`; root `biome.json` extends it. Run `bun run lint` / `bun run lint:fix` (Biome via Turbo). Biome sorts imports on save/format — expect import reordering, don't fight it.
+2. **Linting/formatting is Biome, NOT ESLint/Prettier.** Config in `@notils/config/biome.json`; root `biome.json` extends it. Run `bun run lint` / `bun run lint:fix` (Biome via Turbo). Biome sorts imports on save/format — expect import reordering, don't fight it. Two things about this setup that cost real debugging time:
+   - **Workspace imports sort as their own group**, after third-party and before `:ALIAS:`. The `:PACKAGE:` group carries a **`!@notils/**` negation** and that negation is load-bearing: Biome matches groups top-down and `@notils/*` genuinely *is* a node_modules package (bun symlinks workspace members there), so without the negation `:PACKAGE:` claims those specifiers first and a later `["@notils/**"]` group never matches. Placing the group *before* `:PACKAGE:` "works" but sorts workspace imports ahead of third-party, which is backwards. There is no ordering of the two groups alone that gets it right — the negation is required.
+   - **`biome.json`'s `$schema` version must match the installed CLI**, or Biome emits a schema-mismatch warning on every run. The dep uses a caret range (per "never hand-pin" below), so bumping Biome means bumping the `$schema` URL in **both** `biome.json` files in the same change.
+   - **Every package needs its own `lint` script.** `turbo.json`'s `lint` task is `{"dependsOn": ["^lint"]}` with no own command, so it **silently no-ops** for any package lacking one — no error, no warning, and root `bun run lint` still cheerfully reports all packages in scope. A package added without a `lint` script is simply never linted.
 3. **shadcn lives in a shared `packages/ui` workspace (`@notils/ui`), never per-app.** One design system, one place to add/update components. See "The @notils/ui package" below.
 4. **We did NOT use `shadcn init --monorepo`.** That flag scaffolds shadcn's *own* opinionated monorepo (its own app/tsconfig/tailwind wiring) and fights our config. It's for greenfield only. We wire shadcn manually into `packages/ui` so it respects our setup — the same pattern shadcn's monorepo output uses underneath.
 5. **Base UI is the component base, not Radix.** `components.json` `style: "base-nova"` → `shadcn info` reports `base: "base"`. Components import from `@base-ui/react/*`. We migrated off the unified `radix-ui` package (see "Base UI vs Radix").
@@ -176,9 +186,10 @@ The CLI will offer two output shapes: **monorepo** (apps/* + packages/*) and **s
 
 The CLI (scaffolds this template in **monorepo** or **standalone** shape, via
 the flatten transform described above) is built and published to npm as
-`create-notils`, first release **v0.1.0**. Local dev/testing loop is documented
-in [docs/testing-locally.md](../../../docs/testing-locally.md) — read that
-before changing CLI source or cutting a release.
+`create-notils`. Latest release **v0.2.0** (auth stack + form-builder + the
+generalized standalone fold); first was v0.1.0. Local dev/testing loop is
+documented in [docs/testing-locally.md](../../../docs/testing-locally.md) — read
+that before changing CLI source or cutting a release.
 
 Since the initial build, these CLI behaviors were added/fixed — know them
 before touching `packages/create-notils/src/*`:
@@ -200,6 +211,26 @@ before touching `packages/create-notils/src/*`:
   it: `flatten.ts` already strips the `@notils/ui` scope entirely, and that
   rewrite depends on the literal string, so the scope-rename step must stay
   monorepo-only (running it first would break flatten's hardcoded match).
+- **Standalone fold is generalized over library packages** (`flatten.ts`).
+  `LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"]`
+  drives it: each one's `src/*` moves to `src/lib/<name>/*` and every
+  `@notils/<name>/*` specifier rewrites to `@/lib/<name>/*`, with its deps
+  merged into the single package.json. **Adding a new internal package that
+  `apps/app` imports means adding its name to that array — nothing else.** It
+  assumes the shape `ui` already has (a flat `exports` map); an `auth/*`-style
+  nested export works too, since the rewrite is a prefix replace.
+- **`sortImports` runs after install** (`index.ts`) — `<pm> run lint:fix` on the
+  scaffolded project. **Why it's needed, so it doesn't get deleted as
+  redundant:** both shapes rewrite specifiers after fetching the template
+  (standalone maps `@notils/ui/*` → `@/components/*` and `@notils/<lib>/*` →
+  `@/lib/<lib>/*`; monorepo renames the `@notils/` scope), and that changes how
+  the specifiers sort. Imports ordered in the template are no longer ordered
+  after the rewrite — measured at **13 files** in standalone output — so without
+  this step every fresh scaffold opens with import-sort diagnostics. Biome's own
+  sorter is the only correct implementation of the configured groups; don't
+  reimplement the ordering. Gated on install actually **succeeding** (not merely
+  being requested — Biome must be on disk), runs before `git init` so the
+  initial commit is clean, and a failure warns without failing the scaffold.
 - **Package-manager fixups** (`scaffold.ts`), applied after the flatten/apps
   step, for every manager EXCEPT the one already baked into the template.
   Getting these right requires actually running `<pm> install` + `<pm> dev`
@@ -331,6 +362,42 @@ not to re-discover:
    checking a config field's value (e.g. `devEngines`) is not enough; it
    caught neither bug here.
 
+## The `add` command (`@notils/cli`) — DESIGNED, NOT YET BUILT
+
+Full design: [`docs/add-command-design.md`](../../../docs/add-command-design.md).
+Read it before writing any of it. The decisions that constrain work elsewhere:
+
+- **It's a SEPARATE published package, `@notils/cli`, run via `bunx` and never
+  installed into the target project.** Stateless, so a fix reaches every
+  project including ones scaffolded months ago; no dependency for a brownfield
+  dev to add before their first `add`. Rejected: vendoring a copy into each
+  scaffold (freezes at scaffold time, can't serve brownfield at all), a
+  devDependency (worse first touch), and a `create-notils add` subcommand.
+- **The primary target is a BROWNFIELD project** — someone else's existing
+  Next.js repo, not one of our scaffolds. That's the harder constraint and it
+  drives the design; a tool that only works in our own scaffolds is just a
+  scaffolder feature. Consequence: `add` must detect shape/scope/paths when its
+  config file is absent, and must check the foundations it can't assume
+  (Tailwind v4 CSS-first, the theme token layer, Base UI vs Radix, React 19)
+  and degrade to a clear incompatibility report rather than writing a broken
+  project.
+- **Standalone output reuses the flatten transform**, not a prebuilt registry —
+  same "monorepo is the single source" rule as the scaffold. **This forces a
+  refactor first:** `rewriteUiSpecifier`/`rewriteLibrarySpecifier` and friends
+  are currently private to `packages/create-notils/src/flatten.ts` and must move
+  to a shared internal package both CLIs consume. Extract the shared package;
+  don't make `@notils/cli` depend on the scaffolder (backwards).
+- **Dependency resolution is mandatory, not a nicety.** The graph is real —
+  `auth-ui` → `auth-custom` → `api-client`, plus `form-builder` → `ui` — so
+  `add auth-ui` pulls five packages. Resolve the transitive closure, confirm
+  before writing, and **detect a modified existing copy rather than clobbering
+  it** (everything we write is the user's source and they're invited to edit
+  it — offer a diff, as `ui:diff` already does).
+- **`add` must sort imports after writing**, for the same reason
+  `create-notils` now does (see the CLI section above): rewriting specifiers
+  changes their sort order, so freshly-added files otherwise open with
+  import-sort diagnostics.
+
 ## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 
 Full design: [`docs/auth-and-api-client-design.md`](../../../docs/auth-and-api-client-design.md)
@@ -392,10 +459,15 @@ does auth" are both real, common cases that need different generated code.
   shadcn variant likely assumes Radix; this repo is on Base UI (see "Base UI
   vs Radix" above) — may need re-porting its components rather than dropping
   them in directly.
-- **`bunx create-notils add <capability>`** — NOT YET BUILT. The delivery
-  mechanism for adding a provider to an already-scaffolded project (not just
-  at initial scaffold time). Needed before a second provider is worth
-  building, so it's sequenced before the Better Auth provider.
+- **The `add` command** — NOT YET BUILT, but **designed**: see
+  [`docs/add-command-design.md`](../../../docs/add-command-design.md). Ships as
+  a **separate `@notils/cli` package**, run via `bunx` and never installed into
+  the target project — NOT a subcommand on `create-notils` (npm's `create-*`
+  convention is for scaffolders, and `create-notils add` reads wrong for an
+  existing project). Needed before a second auth provider is worth building, so
+  it's sequenced before the Better Auth provider. Read that doc before writing
+  any of it; the three decisions that constrain other work are summarized in
+  "The `add` command" below.
 
 ## Roadmap — PLANNED, NOT YET BUILT
 

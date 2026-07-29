@@ -27,8 +27,13 @@ export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.2.0";
  * end-user `app-guide` and `shadcn` skills, and their `.claude/skills` links.
  */
 export const PATHS_TO_STRIP = [
-  // The CLI itself and its build cache.
+  // The CLIs and their shared internals — tooling for building/maintaining
+  // create-notils, not template source. `transform` is bundled into each CLI's
+  // dist at publish time (see their tsup configs), so nothing in a scaffolded
+  // project ever references it.
   "packages/create-notils",
+  "packages/transform",
+  "packages/cli",
   ".turbo",
   // VCS history — the scaffold gets a fresh `git init`.
   ".git",

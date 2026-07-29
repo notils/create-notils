@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { LIBRARY_PACKAGE_NAMES } from "@notils/transform/packages";
+import { rewriteSpecifiersInTree } from "@notils/transform/specifiers";
+
 import {
   copyDirectory,
   copyDirectoryIfExists,
@@ -21,94 +24,11 @@ import {
 // app, extended with one `src/lib/<package>/` per internal library package:
 // src/{app,components,lib,hooks,lib/<package>}, one package.json / tsconfig /
 // biome / components.json, and every import via the `@/*` alias.
-
-/**
- * Every internal `@notils/*` package OTHER than `ui`/`config` (which have
- * their own dedicated handling below) that a standalone project needs folded
- * in. Add a new package here — nothing else — when it's added to packages/
- * and something in apps/app imports it; its `src/*` moves to
- * `src/lib/<name>/*` and every `@notils/<name>/*` specifier rewrites to
- * `@/lib/<name>/*`. This assumes the same shape `ui` already has: a flat
- * `exports` map of `./subpath: ./src/subpath.ts(x)` entries (an `auth/*`-style
- * nested export, as in api-client, works too — the rewrite is a prefix
- * replace, not a fixed subpath list).
- */
-const LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"] as const;
-
-/** Rewrite one `@notils/ui/<area>/...` specifier to its `@/<area>/...` form. */
-function rewriteUiSpecifier(specifier: string): string {
-  // @notils/ui/components/ui/button -> @/components/ui/button
-  // @notils/ui/lib/utils            -> @/lib/utils
-  // @notils/ui/hooks/use-x          -> @/hooks/use-x
-  return specifier.replace(/^@notils\/ui\//, "@/");
-}
-
-/** Rewrite one `@notils/<library>/<subpath>` specifier to its folded `@/lib/<library>/<subpath>` form. */
-function rewriteLibrarySpecifier(specifier: string): string {
-  // @notils/auth-custom/contract -> @/lib/auth-custom/contract
-  // @notils/api-client/auth/types -> @/lib/api-client/auth/types
-  for (const library of LIBRARY_PACKAGES) {
-    const prefix = `@notils/${library}/`;
-    if (specifier.startsWith(prefix)) {
-      return `@/lib/${library}/${specifier.slice(prefix.length)}`;
-    }
-  }
-  return specifier;
-}
-
-/**
- * Rewrite `@notils/ui/...` and `@notils/<library>/...` module specifiers
- * inside import/export/require/CSS `@import` statements. This is
- * specifier-aware: it only touches quoted module paths, never comments or
- * prose that happen to contain the string.
- */
-function rewriteSpecifiersInSource(contents: string): string {
-  // Matches a quoted specifier starting with @notils/ in any of:
-  //   import ... from "@notils/x/y"      export ... from '@notils/x/y'
-  //   import("@notils/x/y")              require("@notils/x/y")
-  //   @import "@notils/x/y"
-  // We match the quoted string form directly, so only real specifiers change.
-  return contents.replace(/(["'])(@notils\/[^"']+)\1/g, (_match, quote, specifier) => {
-    const rewritten =
-      specifier === "@notils/ui" || specifier.startsWith("@notils/ui/")
-        ? rewriteUiSpecifier(specifier)
-        : rewriteLibrarySpecifier(specifier);
-    return `${quote}${rewritten}${quote}`;
-  });
-}
-
-// File extensions whose module specifiers we rewrite.
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css"]);
-const IGNORED_DIRECTORIES = new Set(["node_modules", ".git", ".next", "dist", "build"]);
-
-function hasSourceExtension(fileName: string): boolean {
-  const dotIndex = fileName.lastIndexOf(".");
-  return dotIndex !== -1 && SOURCE_EXTENSIONS.has(fileName.slice(dotIndex));
-}
-
-/** Recursively rewrite `@notils/ui/*` specifiers in every source file under `directory`. */
-async function rewriteSpecifiersInTree(directory: string): Promise<void> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!IGNORED_DIRECTORIES.has(entry.name)) {
-          await rewriteSpecifiersInTree(entryPath);
-        }
-        return;
-      }
-      if (!hasSourceExtension(entry.name)) {
-        return;
-      }
-      const original = await readFile(entryPath, "utf8");
-      const rewritten = rewriteSpecifiersInSource(original);
-      if (rewritten !== original) {
-        await writeTextFile(entryPath, rewritten);
-      }
-    })
-  );
-}
+//
+// The package list and the specifier rewrites live in `@notils/transform`, so
+// `@notils/cli add` applies the identical transform to a single package in an
+// existing project. **To add a new internal package, edit
+// `INTERNAL_PACKAGES` in @notils/transform/packages — not this file.**
 
 /**
  * Step 2: merge the two globals.css files into the app's stylesheet. The app's
@@ -383,7 +303,7 @@ export async function flattenToStandalone(projectRoot: string, projectName: stri
   //     not every scaffold necessarily includes every library package, so a
   //     missing one is skipped rather than treated as an error.
   const foldedLibraryPackages: string[] = [];
-  for (const library of LIBRARY_PACKAGES) {
+  for (const library of LIBRARY_PACKAGE_NAMES) {
     const copied = await copyDirectoryIfExists(
       join(projectRoot, "packages", library, "src"),
       join(appSrc, "lib", library)

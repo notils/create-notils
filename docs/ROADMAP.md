@@ -44,8 +44,11 @@ integration, and it has zero external unknowns to de-risk.
         thrown. Verified end-to-end: a throwaway config + `createAuthContract`
         call typechecks with full inference and no manual type annotations
         at the call site.
-  - [ ] Add-time `add` command prompts to fill in `CustomBackendAuthConfig`
-        interactively (blocked on the `add` command itself, next section)
+  - [ ] Add-time `add` command fills in `CustomBackendAuthConfig` (blocked on
+        the `add` command itself, next section). Open question in
+        [add-command-design.md](add-command-design.md): interactive prompts vs.
+        a heavily-commented stub file. Leaning stub — a 12-question prompt to
+        scaffold one file is worse than clear TODOs.
 - [x] **`@notils/form-builder`** — a recursive Zod-schema-to-form renderer,
       built from scratch after research found no existing library targets
       Base UI (every shadcn-ecosystem form generator found —`@rjsf/shadcn`,
@@ -114,24 +117,59 @@ integration, and it has zero external unknowns to de-risk.
       yet done — the manual `next build` above proves the wiring works in
       this repo, but CI doesn't yet check it automatically on every change.
 
-## Next: `bunx create-notils add` command
+## Next: the `add` command — `bunx @notils/cli add <name>`
+
+**Design is settled: [add-command-design.md](add-command-design.md).** Read it
+before starting; the decisions below are already made, not open.
 
 Rationale: needed before a second provider (Better Auth) is worth adding —
 without `add`, every provider has to be baked into the initial scaffold
 prompts, which doesn't scale and doesn't serve "add auth to a project I
-already scaffolded."
+already have." The **brownfield** case (someone else's existing Next.js repo,
+never scaffolded by us) is the primary target and the harder constraint — it's
+what makes this a product rather than a scaffolder feature.
 
-- [ ] `add` command skeleton: detect project shape (monorepo vs standalone,
-      via existing `turbo.json`/`packages/` markers), fetch a provider's
-      template fragment via the same `tiged`-then-transform pipeline already
-      used for the main scaffold, scoped to a subdirectory.
-- [ ] Splice provider files into the right location per shape, merge
-      `package.json` deps, run the specifier-aware import rewrite.
-- [ ] `add auth` prompts for provider (`better-auth` | `custom`), or
-      `add auth:custom` / `add auth:better-auth` to skip the prompt.
-- [ ] Decide + build (or defer) a providers-lock manifest (alongside the
-      existing `skills-lock.json` pattern) so `add` can detect "auth already
-      installed with provider X."
+Settled decisions: a **separate published `@notils/cli`** package run via
+`bunx`, never installed into the target; a `notils.json` config (the
+`components.json` equivalent) that `add` writes at scaffold time and `init`
+writes for brownfield; **reuse the flatten transform** for standalone targets
+rather than a prebuilt registry.
+
+- [ ] **Extract the shared transform first** — `rewriteUiSpecifier`,
+      `rewriteLibrarySpecifier`, `rewriteSpecifiersInSource`/`InTree` are
+      currently private to `packages/create-notils/src/flatten.ts`. Move them to
+      a shared internal package both CLIs consume (`packages/transform`). Do NOT
+      make `@notils/cli` depend on the scaffolder — that's backwards. This is a
+      prerequisite, not a cleanup.
+- [ ] `packages/cli` (`@notils/cli`) skeleton + its own release pipeline.
+- [ ] `notils.json`: schema, written by `create-notils` at scaffold time.
+- [ ] `init` — detect shape (`packages/` + `workspaces` → monorepo; scope from
+      root `name`; paths probed from `tsconfig.json` aliases / `components.json`),
+      confirm, persist.
+- [ ] `add <name>` core: fetch `packages/<name>` from the pinned tag, then
+      either write to `packages/<name>/` + rename scope (monorepo) or
+      rewrite-and-fold into `src/lib/<name>/` (standalone).
+- [ ] **Transitive dep resolution** — `auth-ui` → `auth-custom` → `api-client`,
+      plus `form-builder` → `ui`, so one `add auth-ui` pulls five packages.
+      Resolve the closure, report it, confirm before writing.
+- [ ] **Don't clobber modified files.** Detect an existing copy the user has
+      edited and offer a diff (as `ui:diff` already does) instead of
+      overwriting. Everything we write is their source and they're invited to
+      edit it.
+- [ ] Merge external deps into the target `package.json` resolving latest — no
+      hand-pinned versions.
+- [ ] Run the project's formatter on what was written (same reason
+      `create-notils` now has `sortImports`: rewriting specifiers changes their
+      sort order).
+- [ ] **Brownfield compatibility checks** — Tailwind v4 CSS-first, the theme
+      token layer, Base UI vs an existing Radix shadcn install, React 19/Next 16
+      peers. Degrade to a clear incompatibility report; never write a project
+      that won't compile.
+- [ ] `list` — what's available, what's installed, and version drift vs the
+      CLI's pinned tag.
+- [ ] Decide the versioning question left open in the design doc: does `add`
+      fetch the CLI's own version's tag, or latest? (Leaning: pin to CLI
+      version, surface drift in `list`.)
 
 ## Then: Better Auth provider
 
