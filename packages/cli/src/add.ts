@@ -8,10 +8,11 @@ import { tryRunCommand } from "@notils/transform/process";
 import type { NotilsConfig } from "@notils/transform/project-config";
 
 import type { AddOptions } from "./cli.js";
-import { checkCompatibility } from "./compat.js";
+import { checkCompatibility, hasThemeTokens } from "./compat.js";
 import { cleanupFetched, fetchPackageSource } from "./fetch.js";
 import { CancelledError, loadOrInitConfig } from "./init.js";
 import { targetDirectory } from "./installed.js";
+import { appendThemeLayer, findStylesheet, readThemeLayer, summarizeThemeLayer } from "./theme.js";
 import { applyPlan, type PackagePlan, planPackage } from "./write-package.js";
 
 /**
@@ -21,7 +22,8 @@ import { applyPlan, type PackagePlan, planPackage } from "./write-package.js";
 export async function runAdd(
   projectRoot: string,
   requested: string[],
-  options: AddOptions
+  options: AddOptions,
+  cliVersion: string
 ): Promise<void> {
   const config = await loadOrInitConfig(projectRoot, { yes: options.yes });
 
@@ -36,14 +38,9 @@ export async function runAdd(
     );
   }
 
-  const plans = await planAll(projectRoot, resolved, config);
+  const { plans, themeLayer } = await planAll(projectRoot, resolved, config, cliVersion);
   const summary = summarize(plans, config);
   note(summary.text, options.dryRun ? "Would write" : "Plan");
-
-  if (summary.newCount === 0 && summary.modifiedCount === 0) {
-    log.success("Everything is already up to date.");
-    return;
-  }
 
   // Report foundation mismatches BEFORE the confirmation (and before the
   // dry-run exit — a dry run is exactly when you want to hear about them), so
@@ -55,7 +52,20 @@ export async function runAdd(
     log.message(pc.dim(`  ${issue.remedy}`));
   }
 
+  // Nothing to write doesn't mean nothing to do: the theme gap is independent of
+  // whether the source files are current, so a re-run on an up-to-date project
+  // still offers the tokens it's missing.
+  if (summary.newCount === 0 && summary.modifiedCount === 0) {
+    log.success("Source files are already up to date.");
+    await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
+    return;
+  }
+
   if (options.dryRun) {
+    // Preview the theme offer too — the whole point of a dry run is to see
+    // everything that would happen, and this is the one step that edits a file
+    // the user already had.
+    await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
     log.info("Dry run — nothing was written.");
     return;
   }
@@ -93,10 +103,90 @@ export async function runAdd(
   }
 
   await mergeDependencies(projectRoot, resolved);
+  await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
 
   if (written.length > 0 && !options.skipFormat) {
     await formatWritten(projectRoot);
   }
+}
+
+/**
+ * Offer to append the theme tokens when the project has none.
+ *
+ * Without a token layer the components render unstyled, so this is the
+ * difference between `add ui` working and appearing broken. But appending to
+ * someone's existing stylesheet is invasive, so it's always a prompt — never
+ * silent, and `--yes` does NOT auto-accept it (an unattended run shouldn't
+ * rewrite CSS it wasn't explicitly asked to touch).
+ */
+async function offerThemeTokens(
+  projectRoot: string,
+  config: NotilsConfig,
+  packages: InternalPackage[],
+  themeLayer: string | null,
+  options: AddOptions
+): Promise<void> {
+  if (!packages.some((pkg) => pkg.name === "ui") || !themeLayer) {
+    return;
+  }
+  if (await hasThemeTokens(projectRoot, config)) {
+    return;
+  }
+
+  const stylesheet = await findStylesheet(projectRoot, config);
+  if (!stylesheet) {
+    log.warn("No global stylesheet found, so the theme tokens were not added.");
+    log.message(
+      pc.dim(
+        "  The components need them to render correctly — add a globals.css and re-run, or copy a shadcn theme block in yourself."
+      )
+    );
+    return;
+  }
+
+  log.warn(`${pc.cyan(stylesheet)} has no theme tokens — the components will render unstyled.`);
+  for (const line of summarizeThemeLayer(themeLayer)) {
+    log.message(pc.dim(`  + ${line}`));
+  }
+
+  if (options.dryRun) {
+    log.info(pc.dim(`  Would offer to append these to ${stylesheet}.`));
+    return;
+  }
+
+  // `--with-theme` is the explicit opt-in; `--yes` deliberately isn't, because
+  // rewriting a stylesheet the user already had is a bigger step than writing
+  // new files.
+  if (!options.withTheme) {
+    // No TTY (CI, piped input) means the prompt can never be answered — it
+    // would hang forever. Skip the edit and say how to get it, rather than
+    // silently rewriting a stylesheet nobody was there to approve.
+    if (process.stdin.isTTY !== true) {
+      log.info(
+        pc.dim(
+          `  Not prompting without a terminal — pass --with-theme to append them, or paste the block into ${stylesheet} yourself.`
+        )
+      );
+      return;
+    }
+
+    const accept = await confirm({
+      message: `Append them to ${stylesheet}?`,
+      initialValue: true,
+    });
+    if (isCancel(accept)) throw new CancelledError();
+    if (!accept) {
+      log.info(
+        pc.dim(
+          "Left your stylesheet alone. The components will look unstyled until you add tokens."
+        )
+      );
+      return;
+    }
+  }
+
+  await appendThemeLayer(projectRoot, stylesheet, themeLayer);
+  log.success(`Appended theme tokens to ${stylesheet}.`);
 }
 
 /**
@@ -130,26 +220,37 @@ async function formatWritten(projectRoot: string): Promise<void> {
   progress.stop(ok ? "Formatted" : `Could not run ${script} — run it yourself`);
 }
 
-/** Fetch and plan every resolved package, cleaning up each temp fetch. */
+/**
+ * Fetch and plan every resolved package, cleaning up each temp fetch.
+ *
+ * Also captures `ui`'s theme layer while its source is still on disk — the
+ * fetched directory is deleted immediately after planning, and the theme offer
+ * happens later, after the user has confirmed the writes.
+ */
 async function planAll(
   projectRoot: string,
   packages: InternalPackage[],
-  config: NotilsConfig
-): Promise<PackagePlan[]> {
+  config: NotilsConfig,
+  cliVersion: string
+): Promise<{ plans: PackagePlan[]; themeLayer: string | null }> {
   const plans: PackagePlan[] = [];
+  let themeLayer: string | null = null;
   const progress = spinner();
 
   for (const pkg of packages) {
     progress.start(`Fetching ${pkg.name}`);
-    const fetched = await fetchPackageSource(pkg.name);
+    const fetched = await fetchPackageSource(pkg.name, cliVersion);
     try {
       plans.push(await planPackage(projectRoot, fetched, pkg, config));
+      if (pkg.name === "ui") {
+        themeLayer = await readThemeLayer(fetched);
+      }
       progress.stop(`Fetched ${pkg.name}`);
     } finally {
       await cleanupFetched(fetched);
     }
   }
-  return plans;
+  return { plans, themeLayer };
 }
 
 type Summary = { text: string; newCount: number; modifiedCount: number };

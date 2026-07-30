@@ -5,6 +5,8 @@ import { pathExists, readJsonFile } from "@notils/transform/filesystem";
 import type { InternalPackage } from "@notils/transform/packages";
 import type { NotilsConfig } from "@notils/transform/project-config";
 
+import { stylesheetCandidates } from "./theme.js";
+
 /**
  * Brownfield compatibility checks.
  *
@@ -45,16 +47,12 @@ function dependencyRange(pkg: PackageJson, name: string): string | undefined {
  *
  * Looked for in CSS rather than inferred: a project could define them anywhere,
  * so we scan its stylesheets for `--primary`, which every shadcn theme declares.
+ *
+ * Exported because `add`'s theme-injection offer gates on the same question —
+ * one definition, so the warning and the offer can never disagree.
  */
-async function hasThemeTokens(projectRoot: string, config: NotilsConfig): Promise<boolean> {
-  const candidates = [
-    "src/app/globals.css",
-    "app/globals.css",
-    "src/styles/globals.css",
-    "styles/globals.css",
-    `${config.paths.components}/../app/globals.css`,
-  ];
-  for (const candidate of candidates) {
+export async function hasThemeTokens(projectRoot: string, config: NotilsConfig): Promise<boolean> {
+  for (const candidate of stylesheetCandidates(config)) {
     const path = join(projectRoot, candidate);
     if (!(await pathExists(path))) continue;
     const css = await readFile(path, "utf8").catch(() => "");
@@ -127,10 +125,14 @@ export async function checkCompatibility(
     }
 
     if (!(await hasThemeTokens(projectRoot, config))) {
+      // `add ui` offers to append the token block; the other UI packages don't
+      // carry it, so for those the user has to add it themselves.
+      const addingUi = packages.some((candidate) => candidate.name === "ui");
       issues.push({
         summary: "No semantic color tokens (--primary, --muted-foreground, …) found in your CSS.",
-        remedy:
-          "The components reference these tokens via bg-primary/text-muted-foreground and will render unstyled without them. Copy a shadcn theme block into your globals.css.",
+        remedy: addingUi
+          ? "The components reference these via bg-primary/text-muted-foreground and render unstyled without them — you'll be offered the token block below."
+          : "These components reference them via bg-primary/text-muted-foreground and will render unstyled. Run `notils add ui` to get the token block, or copy a shadcn theme into your globals.css.",
       });
     }
 

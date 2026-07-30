@@ -43,7 +43,7 @@ async function main(): Promise<void> {
       break;
 
     case "add":
-      await runAdd(projectRoot, parsed.packages, parsed.options);
+      await runAdd(projectRoot, parsed.packages, parsed.options, cliVersion);
       outro(pc.green("Done."));
       break;
   }

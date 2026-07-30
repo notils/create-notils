@@ -407,8 +407,23 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   `lint:fix`/`format` script, for the same reason `create-notils` does:
   rewriting specifiers changes their sort order.
 
-Known gaps, deliberately: `add ui` warns rather than writing a theme-token layer
-into someone's `globals.css`; `list` has no version-drift column yet.
+- **`@notils/cli`'s VERSION IS ITS TEMPLATE REF.** `@notils/cli@X.Y.Z` fetches
+  package source from tag `vX.Y.Z`. **Publishing it requires a pushed `vX.Y.Z`
+  tag**, or every `add` from that version dies at the fetch step. This is the
+  easiest release mistake to make — see
+  [docs/testing-locally.md](../../../docs/testing-locally.md).
+- **`add ui` offers the theme token layer** when the project has no `--primary`,
+  because the components reference `bg-primary` etc. and render unstyled without
+  it. The block is extracted from the fetched `ui` package's own `globals.css`
+  (one source of truth — a theme change upstream reaches `add` for free) with its
+  `@import "tailwindcss"`/`@source` lines stripped, since the target already has
+  its own and duplicating either breaks the build or rescans the wrong tree.
+  It is ALWAYS a prompt: `--yes` deliberately doesn't cover it, because editing a
+  stylesheet the user already had is a bigger step than writing new files;
+  `--with-theme` is the explicit opt-in (and the only path when there's no TTY,
+  where a prompt would hang forever).
+
+Known gap, deliberately: `list` has no version-drift column yet.
 
 ## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 

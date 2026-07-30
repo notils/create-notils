@@ -1,7 +1,43 @@
-# Testing create-notils locally
+# Testing the CLIs locally
 
-How to run and verify the `create-notils` CLI from source before publishing. The
-CLI lives in [`packages/create-notils`](../packages/create-notils).
+How to run and verify the CLIs from source before publishing. There are two:
+
+- [`packages/create-notils`](../packages/create-notils) — scaffolds a new project
+  (`npm create notils@latest`). Most of this document is about this one.
+- [`packages/cli`](../packages/cli) — `@notils/cli`, adds capabilities to an
+  existing project (`bunx @notils/cli add …`). See
+  [add-command-design.md](add-command-design.md); its release rule is below.
+
+Both fetch template content from this repo at a pinned ref and share
+[`packages/transform`](../packages/transform), which is **private and never
+published** — each CLI inlines it at build time via tsup `noExternal`. After
+touching either build config, confirm the bundle is self-contained:
+
+```bash
+cd packages/cli && bun run build && grep 'from "@notils' dist/index.js   # must find nothing
+```
+
+A match there means the published CLI would die with `ERR_MODULE_NOT_FOUND` on
+first run.
+
+## ⚠️ `@notils/cli`'s version IS its template ref
+
+`@notils/cli@X.Y.Z` fetches package source from the git tag `vX.Y.Z`
+(`templateRef()` in `packages/cli/src/fetch.ts`). That makes each published
+version reproducible — it always writes the same source — and users still get
+current source because `bunx` resolves the newest published CLI.
+
+**The cost: publishing `@notils/cli@X.Y.Z` REQUIRES a pushed `vX.Y.Z` tag.**
+Without it, every `add` from that version fails at the fetch step with
+"could not find commit hash for vX.Y.Z". So when releasing `@notils/cli`:
+
+1. Pick the version, and confirm a matching `vX.Y.Z` tag exists (or will be
+   pushed as part of the same release).
+2. Verify before publishing: `cd packages/cli && bun run build && node dist/index.js add api-client --dry-run -y`
+   in a scratch project. The fetch step is what you're checking.
+
+`create-notils` has the same coupling via its own `TEMPLATE_REF`, but it's a
+hand-edited constant there — see "Publishing to npm" below.
 
 ## How the CLI finds its template
 
@@ -12,7 +48,7 @@ result. The ref is controlled by an env var:
 ```ts
 // packages/create-notils/src/scaffold.ts
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "main";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.2.0";
 ```
 
 So local testing has two independent halves:

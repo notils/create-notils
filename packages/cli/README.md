@@ -42,13 +42,25 @@ bunx @notils/cli add auth-ui
   `create-notils` produces.
 - **Warns about foundations it can't assume** — Tailwind v4, the theme token
   layer, Base UI vs an existing Radix install, React 19. Warnings, not refusals.
+- **Offers the theme tokens** when `add ui` lands in a project with no
+  `--primary` layer, since the components would otherwise render unstyled. Always
+  a prompt — `--yes` does *not* cover it, because appending to a stylesheet you
+  already had is a bigger step than writing new files. `--with-theme` opts in
+  explicitly (needed for scripted/CI use, where there's no TTY to prompt on).
 - **Doesn't pin versions.** It prints the install command for any missing
   external dependencies and lets your package manager resolve them.
 - **Formats what it wrote**, via your project's own `lint:fix`/`format` script
   (`--skip-format` opts out). The specifier rewrite changes import order, so
   without this the new files would open with sort diagnostics.
 
-Flags: `--dry-run`, `--force`, `--yes`, `--skip-format`.
+Flags: `--dry-run`, `--force`, `--yes`, `--with-theme`, `--skip-format`.
+
+### Which source version you get
+
+`@notils/cli@X.Y.Z` fetches from this repo's `vX.Y.Z` tag, so a given CLI version
+always writes the same source. `bunx @notils/cli` resolves the newest published
+CLI, so the default is current. Override with `NOTILS_TEMPLATE_REF` to test
+against a branch.
 
 ## Status
 
@@ -95,8 +107,9 @@ src/
 ├── cli.ts           # commander wiring → a typed ParsedCli union
 ├── add.ts           # resolve → fetch → plan → confirm → apply → format
 ├── write-package.ts # where each file goes, and the don't-clobber comparison
-├── fetch.ts         # tiged subdirectory fetch from the pinned tag
+├── fetch.ts         # tiged subdirectory fetch; version → template ref
 ├── compat.ts        # brownfield foundation checks
+├── theme.ts         # locating the stylesheet and appending the token layer
 ├── init.ts          # detect + confirm + write notils.json
 ├── list.ts          # the capability table
 └── installed.ts     # where a package lives in this project, and whether it's there

@@ -208,10 +208,13 @@ the dev sees lint errors on freshly-added files.
   property, except for the merged `package.json` deps and any wiring `add`
   touched. Probably document `rm -rf` + a dep cleanup note rather than build a
   command that has to track what it wrote.
-- **Versioning.** `add` fetches from a pinned tag. Which one — the CLI's own
-  version, or latest? A project that ran `add ui` six months ago and runs
-  `add auth-ui` today would get two different vintages of `ui`. Leaning toward
-  pinning to the CLI version and surfacing drift in `list`.
+- ~~**Versioning.**~~ **Decided: the CLI's own version is the ref.**
+  `@notils/cli@X.Y.Z` fetches tag `vX.Y.Z`, so a published version always writes
+  the same source, and `bunx` still resolves the newest CLI by default. The
+  tradeoff accepted: publishing requires a matching pushed tag, or `add` fails at
+  fetch — so the fetch error names the missing ref, and the release requirement is
+  documented in [testing-locally.md](testing-locally.md). Drift *reporting* in
+  `list` is still open.
 - **Auth config prompting.** `CustomBackendAuthConfig` has no defaults by design
   — every endpoint and schema is caller-supplied. `add auth-custom` could prompt
   for these interactively, or write a heavily-commented stub. The stub is

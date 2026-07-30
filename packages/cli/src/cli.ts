@@ -14,6 +14,12 @@ export type AddOptions = {
   dryRun?: boolean;
   /** Skip the post-write formatter pass. */
   skipFormat?: boolean;
+  /**
+   * Append the theme tokens without asking. Editing an existing stylesheet is
+   * invasive enough that `--yes` deliberately does NOT cover it, so scripted
+   * setups need an explicit opt-in.
+   */
+  withTheme?: boolean;
 };
 
 export type InitOptions = {
@@ -46,6 +52,10 @@ export function buildProgram(cliVersion: string): Command {
     .option("--force", "overwrite files you have modified")
     .option("--dry-run", "show what would change without writing anything")
     .option("--skip-format", "skip running the project's formatter afterward")
+    .option(
+      "--with-theme",
+      "append the theme tokens to your stylesheet without asking (not covered by --yes)"
+    )
     .addHelpText(
       "after",
       `

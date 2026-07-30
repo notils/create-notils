@@ -175,16 +175,24 @@ rather than a prebuilt registry.
       before the confirmation *and* before the dry-run exit. Verified to fire on
       a hostile fixture and stay silent on a compatible one.
 - [x] `list` — available/installed with real target paths.
+- [x] **Versioning decided: the CLI's version IS the template ref.**
+      `@notils/cli@X.Y.Z` fetches tag `vX.Y.Z`, so each published version is
+      reproducible while `bunx` still resolves the newest CLI by default.
+      **Release requirement:** publishing `@notils/cli@X.Y.Z` needs a pushed
+      `vX.Y.Z` tag or every `add` from that version fails at fetch — documented
+      in [testing-locally.md](testing-locally.md), and the fetch error names the
+      missing ref instead of surfacing tiged's opaque message.
+- [x] **`add ui` theme-token injection** — offers to append the token layer when
+      the project has no `--primary`, extracted from the fetched `ui` package's
+      own globals.css (one source of truth) minus its `@import`/`@source` lines
+      (duplicating those breaks the build or rescans the wrong tree). Always a
+      prompt; `--yes` deliberately does NOT cover it, `--with-theme` is the
+      explicit opt-in for scripted use. Verified on four fixtures: no tokens
+      (offers, appends correctly, preserves the user's own rules), tokens already
+      present (no offer even with `--with-theme`), no stylesheet at all (warns),
+      and a re-run (no duplicate block).
 - [ ] Version-drift reporting in `list` (needs a record of which tag each
       package came from).
-- [ ] `add ui` theme-token injection — it currently *warns* when the project has
-      no `--primary` token layer rather than writing one. Writing into someone's
-      `globals.css` is a bigger decision than copying files; decide whether to
-      offer it behind a prompt.
-- [ ] Decide the versioning question left open in the design doc: does `add`
-      fetch the CLI's own version's tag, or latest? (Currently a `TEMPLATE_REF`
-      constant pinned to `v0.2.0`, overridable via `NOTILS_TEMPLATE_REF`.
-      Leaning: pin to CLI version, surface drift in `list`.)
 
 ## Then: Better Auth provider
 
