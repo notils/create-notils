@@ -30,9 +30,20 @@ export type InternalPackage = {
   /** Other internal package names this one imports from. */
   dependsOn: string[];
   /**
+   * A package this one needs at RUNTIME but does not import — specifically,
+   * `auth-ui` needs *some* auth provider, but depends only on the contract so
+   * that any provider works (see docs/auth-providers-design.md).
+   *
+   * `add` installs it alongside, so a bare `add auth-ui` produces something that
+   * runs rather than components with nothing behind them. Unlike `dependsOn`,
+   * it's a default, not a requirement: asking for a different provider
+   * explicitly (`add auth-ui auth-better-auth`) uses that one instead.
+   */
+  defaultProvider?: string;
+  /**
    * Whether `add` can install this package on its own. `config` is scaffold-only
    * infrastructure — there's nothing meaningful to "add" to an existing project
-   * that already has its own tsconfig and linter.
+   * that already has its own tsconfig and linter. `auth-core` is types only.
    */
   addable: boolean;
 };
@@ -60,10 +71,19 @@ export const INTERNAL_PACKAGES: readonly InternalPackage[] = [
     addable: true,
   },
   {
+    name: "auth-core",
+    description: "The provider-agnostic auth contract (types only)",
+    fold: { kind: "lib" },
+    dependsOn: [],
+    // Not addable on its own: it is types with no runtime behavior, pulled in
+    // automatically by auth-ui and by whichever provider you choose.
+    addable: false,
+  },
+  {
     name: "auth-custom",
     description: "Auth provider for a project with its own existing backend",
     fold: { kind: "lib" },
-    dependsOn: ["api-client"],
+    dependsOn: ["api-client", "auth-core"],
     addable: true,
   },
   {
@@ -77,7 +97,15 @@ export const INTERNAL_PACKAGES: readonly InternalPackage[] = [
     name: "auth-ui",
     description: "SignInForm, SignUpForm, ForgotPasswordForm, SessionStatus, ProtectedRoute",
     fold: { kind: "lib" },
-    dependsOn: ["auth-custom", "form-builder", "ui"],
+    // Depends on the CONTRACT, not on any provider — that is what lets the same
+    // components work with a custom backend or (later) Better Auth. See
+    // docs/auth-providers-design.md.
+    //
+    // Consequence: `add auth-ui` alone gives you components with nothing behind
+    // them. `defaultProvider` names the provider to add alongside so that a bare
+    // `add auth-ui` still produces something that runs.
+    dependsOn: ["auth-core", "form-builder", "ui"],
+    defaultProvider: "auth-custom",
     addable: true,
   },
 ];
@@ -136,5 +164,33 @@ export function resolveWithDependencies(names: readonly string[]): InternalPacka
   for (const name of names) {
     visit(name);
   }
+
+  // Fill in a default provider for anything that needs one at runtime but
+  // deliberately doesn't import it. Skipped when the caller already asked for a
+  // provider explicitly — `add auth-ui auth-better-auth` must not also drag in
+  // auth-custom, which would install two providers for one contract.
+  for (const pkg of [...ordered]) {
+    const provider = pkg.defaultProvider;
+    if (!provider || seen.has(provider)) continue;
+    const alreadyHasOne = ordered.some(
+      (candidate) => candidate.name !== pkg.name && satisfiesContractFor(candidate, pkg)
+    );
+    if (!alreadyHasOne) {
+      visit(provider);
+    }
+  }
   return ordered;
+}
+
+/**
+ * Whether `candidate` is a provider for `consumer` — i.e. it declares the same
+ * contract dependency that `consumer` needs a provider for.
+ *
+ * Structural rather than a hardcoded list: any package that depends on
+ * `auth-core` and isn't the UI itself is an auth provider, so a future
+ * `auth-better-auth` is recognized without editing this function.
+ */
+function satisfiesContractFor(candidate: InternalPackage, consumer: InternalPackage): boolean {
+  const contracts = consumer.dependsOn.filter((name) => name.endsWith("-core"));
+  return contracts.some((contract) => candidate.dependsOn.includes(contract));
 }

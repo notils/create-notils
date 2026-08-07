@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { z } from "zod";
 
-import type { AuthContract } from "@notils/auth-custom/contract";
+import type { AuthContract } from "@notils/auth-core/contract";
 import { SchemaForm } from "@notils/form-builder/schema-form";
 import { Alert, AlertDescription } from "@notils/ui/components/ui/alert";
 

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 
 import type { HttpClient } from "@notils/api-client/http";
 import { HttpError } from "@notils/api-client/http";
+import type { AuthContract, AuthResult, AuthSession } from "@notils/auth-core/contract";
 import type { CustomBackendAuthConfig } from "@notils/auth-custom/config";
-import type { AuthContract, AuthResult, AuthSession } from "@notils/auth-custom/contract";
 
 /**
  * Implements AuthContract against a user-supplied backend, using the config's

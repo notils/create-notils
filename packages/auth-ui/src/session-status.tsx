@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { AuthContract } from "@notils/auth-custom/contract";
+import type { AuthContract } from "@notils/auth-core/contract";
 import { Button } from "@notils/ui/components/ui/button";
 
 /**

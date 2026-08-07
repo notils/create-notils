@@ -46,11 +46,21 @@
         "typescript": "^6.0.3",
       },
     },
+    "packages/auth-core": {
+      "name": "@notils/auth-core",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@notils/config": "workspace:*",
+        "@types/node": "^24.13.3",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/auth-custom": {
       "name": "@notils/auth-custom",
       "version": "0.1.0",
       "dependencies": {
         "@notils/api-client": "workspace:*",
+        "@notils/auth-core": "workspace:*",
         "zod": "^4.4.3",
       },
       "devDependencies": {
@@ -67,7 +77,7 @@
       "name": "@notils/auth-ui",
       "version": "0.1.0",
       "dependencies": {
-        "@notils/auth-custom": "workspace:*",
+        "@notils/auth-core": "workspace:*",
         "@notils/form-builder": "workspace:*",
         "@notils/ui": "workspace:*",
         "zod": "^4.4.3",
@@ -84,7 +94,7 @@
     },
     "packages/cli": {
       "name": "@notils/cli",
-      "version": "0.3.2",
+      "version": "0.4.0",
       "bin": {
         "notils": "./dist/index.js",
       },
@@ -108,7 +118,7 @@
     },
     "packages/create-notils": {
       "name": "create-notils",
-      "version": "0.3.2",
+      "version": "0.4.0",
       "bin": {
         "create-notils": "./dist/index.js",
       },
@@ -427,6 +437,8 @@
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
     "@notils/api-client": ["@notils/api-client@workspace:packages/api-client"],
+
+    "@notils/auth-core": ["@notils/auth-core@workspace:packages/auth-core"],
 
     "@notils/auth-custom": ["@notils/auth-custom@workspace:packages/auth-custom"],
 

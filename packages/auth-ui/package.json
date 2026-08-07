@@ -22,7 +22,7 @@
     "react": "^19.0.0"
   },
   "dependencies": {
-    "@notils/auth-custom": "workspace:*",
+    "@notils/auth-core": "workspace:*",
     "@notils/form-builder": "workspace:*",
     "@notils/ui": "workspace:*",
     "zod": "^4.4.3"

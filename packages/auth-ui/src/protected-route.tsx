@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from "react";
 
-import type { AuthContract } from "@notils/auth-custom/contract";
+import type { AuthContract } from "@notils/auth-core/contract";
 
 /**
  * Gates `children` on session status. Framework-agnostic on purpose — it
