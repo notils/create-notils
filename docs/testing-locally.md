@@ -308,6 +308,33 @@ Release steps:
      — the fetch step is what you're checking.
 7. Create the GitHub Release (`gh release create vX.Y.Z --notes-file <notes>`);
    the git tag's annotation is separate from what renders on the Releases page.
+8. **Install the published artifacts from npm and run them.** Not optional — see
+   below.
+
+### ⚠️ A green local build does not mean a working published package
+
+0.3.0 shipped broken for *both* packages: every install failed with
+`GET https://registry.npmjs.org/@notils%2ftransform - 404`, because each manifest
+declared the private, never-published `@notils/transform` as a runtime
+dependency. Lint, typecheck, `bun run build`, and a grep of `dist/` for unbundled
+imports were all green the whole time — the bundle was correct; only the manifest
+was wrong. No local check could have caught it, because the failure happens in
+*npm's resolver*, not in our code.
+
+`check:publishable` (run from `prepublishOnly`) now blocks that specific cause.
+But the general rule is: after publishing, install from the registry in a scratch
+directory and actually run it.
+
+```sh
+cd $(mktemp -d)
+bunx create-notils@X.Y.Z demo --type standalone --pm bun --no-git --no-install -y
+
+# and in a throwaway brownfield project:
+bunx @notils/cli@X.Y.Z add form-builder --dry-run -y
+```
+
+If either dies at the resolve/fetch step, publish a patch immediately — a broken
+`latest` affects everyone who runs `npm create notils@latest`.
 
 > `@notils/cli` is scoped, so its first publish needs the `@notils` npm
 > organization to exist and `publishConfig.access: public` (already set) —

@@ -188,10 +188,21 @@ The CLI will offer two output shapes: **monorepo** (apps/* + packages/*) and **s
 
 The CLI (scaffolds this template in **monorepo** or **standalone** shape, via
 the flatten transform described above) is built and published to npm as
-`create-notils`. Latest release **v0.2.0** (auth stack + form-builder + the
-generalized standalone fold); first was v0.1.0. Local dev/testing loop is
-documented in [docs/testing-locally.md](../../../docs/testing-locally.md) — read
-that before changing CLI source or cutting a release.
+`create-notils`. **Both packages are published and live at v0.3.2**
+(`create-notils` and `@notils/cli`, sharing a version and the `v0.3.2` tag);
+first release was v0.1.0. Local dev/testing loop is documented in
+[docs/testing-locally.md](../../../docs/testing-locally.md) — read that before
+changing CLI source or cutting a release.
+
+**ALWAYS verify a release by installing it from npm, not just by building it.**
+0.3.0 shipped broken for both packages — every install died with a 404 on the
+private `@notils/transform` — and the local build was perfectly green throughout,
+because the bundle was fine and only the *manifest* was wrong. `bun run build`,
+typecheck, and lint all pass on a package that is unusable once published. The
+check that catches this class of bug is running the published artifact:
+`bunx <pkg>@<version>` in a scratch project. `check:publishable` (in
+`packages/transform/scripts/`) now guards the specific cause from
+`prepublishOnly`, but the general lesson stands.
 
 Since the initial build, these CLI behaviors were added/fixed — know them
 before touching `packages/create-notils/src/*`:
