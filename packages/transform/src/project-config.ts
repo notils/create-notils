@@ -25,6 +25,17 @@ export type ProjectPaths = {
   components: string;
 };
 
+/**
+ * What `add` recorded about one installed package.
+ *
+ * Only the ref for now. It's an object rather than a bare string so a later
+ * field (a content hash, an install timestamp) doesn't force a schema break.
+ */
+export type InstalledRecord = {
+  /** The template ref its source came from, e.g. "v0.2.0". */
+  ref: string;
+};
+
 export type NotilsConfig = {
   $schema?: string;
   shape: ProjectShape;
@@ -36,6 +47,17 @@ export type NotilsConfig = {
    */
   scope: string | null;
   paths: ProjectPaths;
+  /**
+   * Which packages `add` has written, and from which ref — so `list` can report
+   * drift when the CLI has moved on.
+   *
+   * OPTIONAL, and absent means "unknown", never "nothing installed". Configs
+   * written before this field existed, and every scaffolded project (whose
+   * packages came from the scaffold, not from `add`), have no record — but the
+   * packages are on disk. `list` reports those as installed with an unknown
+   * ref rather than claiming they're missing.
+   */
+  installed?: Record<string, InstalledRecord>;
 };
 
 /** Defaults matching what create-notils itself scaffolds. */
@@ -62,6 +84,30 @@ export async function writeProjectConfig(projectRoot: string, config: NotilsConf
     $schema: "https://notils.dev/schema.json",
     ...config,
   });
+}
+
+/**
+ * Record that `packageNames` were installed from `ref`, merging into whatever is
+ * already there.
+ *
+ * Re-reads the config rather than taking one in hand: `add` may have written the
+ * file earlier in the same run (via `init`), and clobbering it with a stale
+ * in-memory copy would drop those edits.
+ */
+export async function recordInstalled(
+  projectRoot: string,
+  packageNames: readonly string[],
+  ref: string
+): Promise<void> {
+  const config = await readProjectConfig(projectRoot);
+  if (!config) {
+    return;
+  }
+  const installed = { ...config.installed };
+  for (const name of packageNames) {
+    installed[name] = { ref };
+  }
+  await writeProjectConfig(projectRoot, { ...config, installed });
 }
 
 /**

@@ -62,6 +62,23 @@ always writes the same source. `bunx @notils/cli` resolves the newest published
 CLI, so the default is current. Override with `NOTILS_TEMPLATE_REF` to test
 against a branch.
 
+`add` records the ref it wrote in `notils.json`, and `list` compares it against
+the CLI's current ref:
+
+```
+outdated  ui → src/components  v0.2.0 → v0.3.0
+```
+
+Re-run `notils add <name>` to update; your edited files are kept unless you pass
+`--force`. A package is only recorded as current when **every** one of its files
+matches upstream — if you've edited one, it stays unrecorded rather than claiming
+a version it isn't wholly at.
+
+Packages that arrived another way (a `create-notils` scaffold, or an `add` from
+before this record existed) have no recorded ref. Those show as installed with no
+version, and `list` says drift can't be detected for them — absent means unknown,
+never "not installed".
+
 ## Status
 
 | command | state |

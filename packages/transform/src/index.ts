@@ -26,10 +26,12 @@ export {
   configPath,
   type DetectionResult,
   detectProjectConfig,
+  type InstalledRecord,
   type NotilsConfig,
   type ProjectPaths,
   type ProjectShape,
   readProjectConfig,
+  recordInstalled,
   writeProjectConfig,
 } from "@notils/transform/project-config";
 export {

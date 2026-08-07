@@ -93,6 +93,9 @@ brownfield project. Records only what `add` cannot reliably infer:
     "packages": "packages",
     "lib": "src/lib",
     "components": "src/components"
+  },
+  "installed": {
+    "ui": { "ref": "v0.2.0" }
   }
 }
 ```
@@ -104,6 +107,12 @@ brownfield project. Records only what `add` cannot reliably infer:
   must write imports in the project's scope, not ours.
 - **`paths`** — where things go, for a brownfield project whose layout isn't
   ours (`app/` instead of `src/app/`, a different lib dir, …).
+- **`installed`** — optional; which packages `add` wrote and from which ref, so
+  `list` can report drift. An entry is written only when every file of that
+  package matched upstream. **Absent means unknown, not uninstalled** — a
+  scaffolded project has the packages with no record, and `list` must not report
+  those as missing. It's an object per package rather than a bare ref string so a
+  later field (content hash, timestamp) isn't a schema break.
 
 **Detection when absent.** `packages/` + `workspaces` in the root
 `package.json` → monorepo, scope from the root `name`. Otherwise standalone,

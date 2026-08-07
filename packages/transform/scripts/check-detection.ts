@@ -1,5 +1,6 @@
 /**
- * Detection checks for `detectProjectConfig`. Run from packages/transform:
+ * Checks for `project-config.ts` — shape detection and the installed-version
+ * record. Run from packages/transform:
  *
  *   bun run check:detection
  *
@@ -15,7 +16,12 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { detectProjectConfig } from "@notils/transform/project-config";
+import {
+  detectProjectConfig,
+  readProjectConfig,
+  recordInstalled,
+  writeProjectConfig,
+} from "@notils/transform/project-config";
 
 let failures = 0;
 
@@ -177,6 +183,72 @@ for (const target of ["./*", "*"]) {
   await writeJson(join(root, "package.json"), { name: "app-only", workspaces: ["apps/*"] });
   const { config } = await detect("workspaces but no packages/", root);
   check("shape is standalone", config.shape === "standalone", `got ${config.shape}`);
+}
+
+// ---------------------------------------------------------------------------
+// 8. recordInstalled — the version-drift record `list` reads.
+// ---------------------------------------------------------------------------
+{
+  const root = await fixture("record");
+  console.log("\n=== recordInstalled ===");
+
+  await writeProjectConfig(root, {
+    shape: "standalone",
+    scope: null,
+    paths: { packages: "packages", lib: "src/lib", components: "src/components" },
+  });
+
+  // A fresh config has no record at all — "unknown", not "nothing installed".
+  const initial = await readProjectConfig(root);
+  check("absent before any add", initial?.installed === undefined, `got ${initial?.installed}`);
+
+  await recordInstalled(root, ["ui", "form-builder"], "v0.2.0");
+  const afterFirst = await readProjectConfig(root);
+  check(
+    "records each package at the ref",
+    afterFirst?.installed?.ui?.ref === "v0.2.0" &&
+      afterFirst?.installed?.["form-builder"]?.ref === "v0.2.0",
+    JSON.stringify(afterFirst?.installed)
+  );
+
+  // A later add at a newer ref must update only what it wrote, leaving the rest
+  // at their old ref — that difference is exactly what drift reporting shows.
+  await recordInstalled(root, ["form-builder"], "v0.3.0");
+  const afterSecond = await readProjectConfig(root);
+  check(
+    "merges without clobbering other entries",
+    afterSecond?.installed?.ui?.ref === "v0.2.0" &&
+      afterSecond?.installed?.["form-builder"]?.ref === "v0.3.0",
+    JSON.stringify(afterSecond?.installed)
+  );
+
+  // The rest of the config must survive the merge.
+  check(
+    "preserves shape/scope/paths",
+    afterSecond?.shape === "standalone" && afterSecond?.paths.lib === "src/lib",
+    JSON.stringify(afterSecond)
+  );
+
+  // Recording nothing is a no-op, not a crash or a wipe (an `add` where every
+  // file was skipped as user-modified passes an empty list).
+  await recordInstalled(root, [], "v0.4.0");
+  const afterEmpty = await readProjectConfig(root);
+  check(
+    "empty list changes nothing",
+    afterEmpty?.installed?.ui?.ref === "v0.2.0" &&
+      afterEmpty?.installed?.["form-builder"]?.ref === "v0.3.0",
+    JSON.stringify(afterEmpty?.installed)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 9. recordInstalled with no config — must not throw or create one.
+// ---------------------------------------------------------------------------
+{
+  const root = await fixture("record-noconfig");
+  console.log("\n=== recordInstalled without notils.json ===");
+  await recordInstalled(root, ["ui"], "v0.2.0");
+  check("no config is created", (await readProjectConfig(root)) === null, "a config appeared");
 }
 
 console.log(

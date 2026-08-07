@@ -16,7 +16,7 @@ in `PATHS_TO_STRIP`, so it never lands in a scaffolded project.
 src/
 ├── packages.ts        # INTERNAL_PACKAGES graph, resolveWithDependencies()
 ├── specifiers.ts      # the @notils/* → @/* rewrites (source, tree, and scope forms)
-├── project-config.ts  # notils.json read/write + brownfield detection
+├── project-config.ts  # notils.json read/write, brownfield detection, installed refs
 ├── filesystem.ts      # generic fs primitives (copy, read/write JSON, exists)
 └── index.ts           # public exports
 scripts/
@@ -90,6 +90,10 @@ rewriting them would be wrong.
 Detection never throws. An undetectable project returns defaults plus
 `lowConfidence: true` and a `reasons[]` array explaining each inference, so `init`
 can show its work instead of asking the user to trust a silent guess.
+
+`recordInstalled(root, names, ref)` maintains the optional `installed` map that
+`list` reads to report version drift. It merges rather than replaces, and is a
+no-op when there's no config — so a caller never has to guard.
 
 `tsconfig.json` is JSONC, so parsing strips comments with a small scanner rather
 than a regex — a naive `//`-stripping regex corrupts `"$schema": "https://…"`,

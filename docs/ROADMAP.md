@@ -122,8 +122,9 @@ integration, and it has zero external unknowns to de-risk.
 **Design is settled: [add-command-design.md](add-command-design.md).** Read it
 before starting; the decisions below are already made, not open.
 
-**Status: the core is BUILT and working** (`add`, `init`, `list`). Remaining
-items are unchecked at the end of this section.
+**Status: BUILT** — `add`, `init`, and `list` all work, and every item in this
+section is checked off. What remains is release work (`@notils/cli` has never
+been published) and the two auth-specific follow-ups in the section above.
 
 Rationale: needed before a second provider (Better Auth) is worth adding —
 without `add`, every provider has to be baked into the initial scaffold
@@ -191,8 +192,15 @@ rather than a prebuilt registry.
       (offers, appends correctly, preserves the user's own rules), tokens already
       present (no offer even with `--with-theme`), no stylesheet at all (warns),
       and a re-run (no duplicate block).
-- [ ] Version-drift reporting in `list` (needs a record of which tag each
-      package came from).
+- [x] **Version-drift reporting in `list`.** `notils.json` grew an optional
+      `installed: { <name>: { ref } }` map that `add` writes; `list` compares it
+      against the CLI's current ref and shows `outdated  v0.2.0 → v0.3.0`.
+      Two decisions worth keeping: a package is recorded only when **every** file
+      matched upstream (a partially-skipped write leaves it unrecorded rather
+      than claiming a version it isn't wholly at), and an absent record means
+      *unknown*, never *not installed* — scaffolded projects have the packages on
+      disk with no record, and must not be reported as missing. Covered by
+      `check:detection` (record merge, non-clobber, empty list, no-config).
 
 ## Then: Better Auth provider
 

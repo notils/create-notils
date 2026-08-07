@@ -423,7 +423,19 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   `--with-theme` is the explicit opt-in (and the only path when there's no TTY,
   where a prompt would hang forever).
 
-Known gap, deliberately: `list` has no version-drift column yet.
+- **`notils.json` records installed versions** (`installed: { <name>: { ref } }`,
+  optional) so `list` can report drift as `outdated  v0.2.0 → v0.3.0`. Two rules
+  that look like edge cases but aren't: a package is recorded ONLY when every one
+  of its files matched upstream — a partially-skipped write (the user edited
+  something) leaves it unrecorded rather than claiming a version it isn't wholly
+  at; and **an absent record means UNKNOWN, never "not installed"** — scaffolded
+  projects have all five packages on disk with no record, and reporting those as
+  missing would be plainly wrong.
+
+`add`, `init`, and `list` are all feature-complete against
+[docs/ROADMAP.md](../../../docs/ROADMAP.md). **`@notils/cli` has never been
+published** — that's the remaining work, and it needs the version/tag lockstep
+above.
 
 ## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 

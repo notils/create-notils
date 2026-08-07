@@ -5,11 +5,11 @@ import pc from "picocolors";
 import { pathExists, readJsonFile } from "@notils/transform/filesystem";
 import { type InternalPackage, resolveWithDependencies } from "@notils/transform/packages";
 import { tryRunCommand } from "@notils/transform/process";
-import type { NotilsConfig } from "@notils/transform/project-config";
+import { type NotilsConfig, recordInstalled } from "@notils/transform/project-config";
 
 import type { AddOptions } from "./cli.js";
 import { checkCompatibility, hasThemeTokens } from "./compat.js";
-import { cleanupFetched, fetchPackageSource } from "./fetch.js";
+import { cleanupFetched, fetchPackageSource, templateRef } from "./fetch.js";
 import { CancelledError, loadOrInitConfig } from "./init.js";
 import { targetDirectory } from "./installed.js";
 import { appendThemeLayer, findStylesheet, readThemeLayer, summarizeThemeLayer } from "./theme.js";
@@ -88,10 +88,18 @@ export async function runAdd(
 
   const written: string[] = [];
   const skipped: string[] = [];
+  // Packages whose source is now fully at this ref. A package with files left at
+  // the user's version is NOT current, so it isn't recorded — otherwise `list`
+  // would claim it's up to date while some of its files are an older vintage.
+  const atCurrentRef: string[] = [];
+
   for (const plan of plans) {
     const result = await applyPlan(projectRoot, plan, { force: options.force ?? false });
     written.push(...result.written);
     skipped.push(...result.skipped);
+    if (result.skipped.length === 0) {
+      atCurrentRef.push(plan.pkg.name);
+    }
   }
 
   log.success(`Wrote ${written.length} file(s).`);
@@ -102,6 +110,7 @@ export async function runAdd(
     }
   }
 
+  await recordInstalled(projectRoot, atCurrentRef, templateRef(cliVersion));
   await mergeDependencies(projectRoot, resolved);
   await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
 
