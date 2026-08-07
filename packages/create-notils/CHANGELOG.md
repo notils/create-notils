@@ -4,6 +4,43 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+### Fixed
+
+- **The agent skill was invisible to Claude Code.** It shipped to
+  `.agents/skills/`, but `.claude/` — the directory Claude Code actually reads —
+  never reached a scaffold at all, because it is gitignored in the template repo
+  (it holds Windows junctions git cannot represent), so the template fetch
+  skipped it entirely. Scaffolds now generate `.claude/skills/` as real files and
+  reference the skill from `CLAUDE.md`. An AI agent opening a fresh project
+  finally knows what create-notils produced.
+
+### Changed
+
+- **The shipped skill is now `notils-project`** (was `app-guide`), and reads as a
+  specification rather than documentation: Overview → Rules → Patterns →
+  Verification, so an agent can find the relevant section instead of scanning
+  prose. The name stays accurate as the document grows to cover database,
+  testing, and deployment.
+- **The vendored shadcn skill is gone** (15 files). Skills for the libraries in
+  this stack are maintained by their own authors — a copy we did not maintain
+  would go stale silently. Install them with the
+  [`skills`](https://www.npmjs.com/package/skills) CLI, which uses the same
+  `.agents/skills/` convention and records everything in `skills-lock.json`:
+
+  ```sh
+  bunx skills add shadcn-ui/ui
+  ```
+
+  The generated README and the `notils-project` skill both point at it.
+
+### Added
+
+- **`--skills` / `--no-skills`**, with an interactive prompt defaulting to yes.
+  Declining removes the skill and prunes the empty directories, so a project that
+  does not want agent context carries no trace of it.
+
 ## 0.3.2
 
 ### Fixed

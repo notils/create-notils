@@ -20,6 +20,8 @@ export type CliOptions = {
   install?: boolean;
   /** `--git` / `--no-git`. Undefined when unspecified. */
   git?: boolean;
+  /** `--skills` / `--no-skills`. Undefined when unspecified. */
+  skills?: boolean;
   /** `-y, --yes`: accept all defaults without prompting. */
   yes?: boolean;
 };
@@ -50,6 +52,8 @@ export function buildProgram(cliVersion: string): Command {
     .option("--no-install", "skip installing dependencies")
     .option("--git", "initialize a git repository (default)")
     .option("--no-git", "skip git initialization")
+    .option("--skills", "include the notils agent guide (default)")
+    .option("--no-skills", "skip the notils agent guide")
     .option("-y, --yes", "accept all defaults without prompting")
     .addHelpText(
       "after",

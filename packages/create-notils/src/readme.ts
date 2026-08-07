@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import type { PackageManager, ProjectType } from "./config.js";
 import { writeTextFile } from "./filesystem.js";
+import { PACKAGE_RUNNER } from "./scaffold.js";
 
 /** How to invoke a run-script for each package manager (`npm` needs `run`). */
 function runScriptCommand(packageManager: PackageManager, script: string): string {
@@ -34,11 +35,34 @@ export async function writeGeneratedReadme(
     projectType: ProjectType;
     packageManager: PackageManager;
     cliVersion: string;
+    /** Whether the `notils-project` skill was included (`--skills`). */
+    includeSkills: boolean;
   }
 ): Promise<void> {
-  const { projectName, projectType, packageManager, cliVersion } = options;
+  const { projectName, projectType, packageManager, cliVersion, includeSkills } = options;
   const dev = runScriptCommand(packageManager, "dev");
   const build = runScriptCommand(packageManager, "build");
+
+  // Skills for the libraries in this stack are maintained by their authors, not
+  // vendored here — so point at the tool that installs them rather than shipping
+  // stale copies. See docs/add-command-design.md for why we don't reimplement it.
+  const skillsSection = `${
+    includeSkills
+      ? `This project ships the \`notils-project\` skill (\`.agents/skills/notils-project/\`) —
+its specification: architecture, layout, rules, and patterns. AI coding agents read
+it automatically.`
+      : `This project was scaffolded without the \`notils-project\` skill. Re-run with
+\`--skills\` in a new project if you want it, or copy it from the create-notils repo.`
+  }
+
+Skills for the libraries in this stack are maintained by their own authors. Install
+them with the [\`skills\`](https://www.npmjs.com/package/skills) CLI:
+
+\`\`\`sh
+${PACKAGE_RUNNER[packageManager]} skills add shadcn-ui/ui   # shadcn/ui component + composition rules
+${PACKAGE_RUNNER[packageManager]} skills find <query>       # search for more
+${PACKAGE_RUNNER[packageManager]} skills list               # what's installed
+\`\`\``;
 
   const layoutSection =
     projectType === "monorepo"
@@ -101,6 +125,10 @@ ${runScriptWithArgs(packageManager, "notils", "add auth-ui")}    # add a capabil
 This runs [\`@notils/cli\`](https://www.npmjs.com/package/@notils/cli) through your
 package runner — it is not a dependency, so you always get the current version.
 Everything it writes is your source; delete the directory to remove a capability.
+
+## AI agent context
+
+${skillsSection}
 
 See \`AGENTS.md\` for architecture, conventions, and setup notes (also read by AI coding agents).
 

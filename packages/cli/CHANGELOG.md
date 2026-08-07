@@ -4,6 +4,30 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+No functional changes. Version bumped in lockstep with `create-notils`, since
+both packages resolve template content from the same `v0.4.0` tag.
+
+### Changed
+
+- **Skill install and search will not be added to this CLI.** The
+  [`skills`](https://www.npmjs.com/package/skills) CLI already does it — `add`,
+  `find`, `list`, `update`, `remove` — writes `skills-lock.json`, installs into
+  `.agents/skills/`, and links into `.claude/skills/` for Claude Code. A
+  `notils add skill:<name>` command with a curated registry was designed and
+  dropped rather than ship a worse copy of a maintained tool.
+
+  Skills for the libraries in this stack are the provider's to maintain:
+
+  ```sh
+  bunx skills add shadcn-ui/ui
+  bunx skills find <query>
+  ```
+
+  `notils add` remains for notils packages (`ui`, `auth-ui`, `form-builder`, …);
+  `notils list` remains installed-only and offline.
+
 ## 0.3.2
 
 ### Fixed

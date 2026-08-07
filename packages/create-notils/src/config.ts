@@ -23,6 +23,12 @@ export type ScaffoldConfig = {
   packageManager: PackageManager;
   installDependencies: boolean;
   initializeGit: boolean;
+  /**
+   * Include the `notils-project` agent skill — the document that tells an AI
+   * coding agent what this project is and how it's wired. Default yes: without
+   * it, an agent opening the project has no idea what create-notils produced.
+   */
+  includeSkills: boolean;
 };
 
 const PACKAGE_MANAGERS: PackageManager[] = ["bun", "pnpm", "npm", "yarn"];
@@ -61,6 +67,7 @@ export async function resolveScaffoldConfig(parsed: ParsedCli): Promise<Scaffold
   const packageManager = resolvePackageManager(options, acceptDefaults);
   const installDependencies = await resolveInstallDependencies(options, acceptDefaults);
   const initializeGit = options.git !== false;
+  const includeSkills = await resolveIncludeSkills(options, acceptDefaults);
 
   return {
     projectName,
@@ -70,7 +77,34 @@ export async function resolveScaffoldConfig(parsed: ParsedCli): Promise<Scaffold
     packageManager,
     installDependencies,
     initializeGit,
+    includeSkills,
   };
+}
+
+/**
+ * Whether to include the agent skill. Defaults to yes — it's one small file and
+ * it's what makes an AI agent useful in the project at all.
+ *
+ * Only OUR skill ships. Third-party skills (shadcn, better-auth, …) are fetched
+ * from their own upstreams via `notils add skill:<name>`, never vendored here:
+ * a copy we don't maintain goes stale silently and isn't ours to keep current.
+ */
+async function resolveIncludeSkills(
+  options: CliOptions,
+  acceptDefaults: boolean
+): Promise<boolean> {
+  if (options.skills === false) {
+    return false;
+  }
+  if (acceptDefaults || options.skills === true) {
+    return true;
+  }
+  return requireAnswer(
+    await confirm({
+      message: "Include the notils agent guide? (helps AI coding agents work in this project)",
+      initialValue: true,
+    })
+  );
 }
 
 type ProjectNameResolution = { projectName: string; scaffoldInPlace: boolean };

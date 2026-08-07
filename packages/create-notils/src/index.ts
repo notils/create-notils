@@ -27,6 +27,7 @@ import {
   alignPackageManagerField,
   configurePnpmWorkspace,
   configurePreCommitHook,
+  configureSkills,
   normalizeWorkspaceProtocol,
   removeBunArtifacts,
   stripInternalPaths,
@@ -161,7 +162,13 @@ async function configureProject(
     projectType: config.projectType,
     packageManager: config.packageManager,
     cliVersion,
+    includeSkills: config.includeSkills,
   });
+
+  // After the shape branch: standalone promotes the app to the root, which moves
+  // CLAUDE.md, so wiring the skill any earlier would edit a file that then gets
+  // replaced.
+  await configureSkills(projectRoot, config.includeSkills);
 
   // After the shape branch above, so the root package.json it edits is the final
   // one (both resetRootMetadata and flattenToStandalone rewrite that file).

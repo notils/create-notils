@@ -79,7 +79,7 @@ bun run ui:add dialog
 bun run ui:add button --overwrite   # update in place; review the git diff
 ```
 
-See the generated `AGENTS.md` and the `app-guide` skill in the project for conventions.
+See the generated `AGENTS.md` and the `notils-project` skill in the project for conventions.
 
 ## Requirements
 

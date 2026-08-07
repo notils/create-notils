@@ -1,6 +1,8 @@
+import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { copyDirectoryIfExists } from "@notils/transform/filesystem";
 import { getCommandOutput } from "@notils/transform/process";
 
 import type { PackageManager } from "./config.js";
@@ -16,7 +18,7 @@ import {
 // for reproducible scaffolds. Bump this when cutting a new template release.
 // Override with NOTILS_TEMPLATE_REF for local testing against a branch.
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.3.2";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.4.0";
 
 /**
  * Paths inside the template that must NEVER end up in a scaffolded project.
@@ -24,8 +26,9 @@ export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.3.2";
  * internal dev skill and settings, the design docs, changelogs, and VCS/build
  * output. A fresh project starts clean (see docs/issue #10).
  *
- * Deliberately KEPT (shipped to scaffolds): AGENTS.md, .husky/pre-commit, the
- * end-user `app-guide` and `shadcn` skills, and their `.claude/skills` links.
+ * Deliberately KEPT (shipped to scaffolds): AGENTS.md, .husky/pre-commit, and
+ * the end-user `notils-project` skill (subject to `--skills`, see
+ * `configureSkills`).
  */
 export const PATHS_TO_STRIP = [
   // The CLIs and their shared internals — tooling for building/maintaining
@@ -40,13 +43,11 @@ export const PATHS_TO_STRIP = [
   ".git",
   // Husky's generated internals; `prepare: husky` recreates them on install.
   ".husky/_",
-  // Internal-only agent context (the shipped app-guide skill stays).
-  ".agents/skills/notils-project",
-  ".claude/skills/notils-project",
+  // Internal-only agent context (the shipped notils-project skill stays).
+  ".agents/skills/create-notils-dev",
   ".claude/settings.json",
-  // Design docs and skill lockfile that describe building create-notils itself.
+  // Design docs that describe building create-notils itself.
   "docs",
-  "skills-lock.json",
   // Changelogs document create-notils's history, not the user's project.
   "CHANGELOG.md",
 ];
@@ -159,6 +160,95 @@ export async function removeBunArtifacts(
   await removePath(join(projectRoot, "bun.lock"));
 }
 
+/** The one skill we ship. Ours, maintained here — see `configureSkills`. */
+const SHIPPED_SKILL = "notils-project";
+
+/**
+ * Set up (or remove) the agent skill in the scaffolded project.
+ *
+ * **Why this exists at all:** the skill ships in the template at
+ * `.agents/skills/<name>/`, which is the tool-agnostic location. But Claude Code
+ * discovers skills under `.claude/skills/`, and that directory can NEVER arrive
+ * from the template — this repo gitignores it, because locally it holds Windows
+ * junctions git cannot represent. So `tiged` fetches no `.claude/` at all, and
+ * every scaffold shipped the skill to a path nothing reads. It was invisible.
+ *
+ * The fix is to GENERATE `.claude/skills/<name>/` as real files (not a junction —
+ * that's what git couldn't track, and a symlink would need admin on Windows),
+ * plus a `CLAUDE.md` reference so it's found even by tools that only read that.
+ *
+ * When `--no-skills` is given, remove the skill from both locations instead.
+ *
+ * Only OUR skill is handled here. Third-party skills (shadcn, better-auth, zod,
+ * drizzle, …) are deliberately NOT vendored — a copy of someone else's skill
+ * goes stale silently and isn't ours to keep current. They're fetched from their
+ * own upstreams on request via `notils add skill:<name>`.
+ */
+export async function configureSkills(projectRoot: string, includeSkills: boolean): Promise<void> {
+  const agentsSkill = join(projectRoot, ".agents", "skills", SHIPPED_SKILL);
+
+  if (!includeSkills) {
+    await removePath(agentsSkill);
+    await removePath(join(projectRoot, ".claude", "skills", SHIPPED_SKILL));
+    // Prune the now-empty scaffolding so a declined skill leaves no trace. Only
+    // if empty — a user-added skill in there must survive.
+    await removeIfEmpty(join(projectRoot, ".agents", "skills"));
+    await removeIfEmpty(join(projectRoot, ".agents"));
+    await removeIfEmpty(join(projectRoot, ".claude", "skills"));
+    await removeIfEmpty(join(projectRoot, ".claude"));
+    return;
+  }
+
+  // Copy rather than link: git can't track a junction (which is why `.claude/`
+  // is gitignored here in the first place), and a real symlink needs elevated
+  // privileges on Windows. A copy always works.
+  const claudeSkill = join(projectRoot, ".claude", "skills", SHIPPED_SKILL);
+  const copied = await copyDirectoryIfExists(agentsSkill, claudeSkill);
+  if (!copied) {
+    // The template didn't carry the skill — nothing to wire up. Not an error:
+    // the scaffold is still valid, just without agent context.
+    return;
+  }
+
+  await referenceSkillFromClaudeMd(projectRoot);
+}
+
+/** Remove a directory only if it exists and is empty. */
+async function removeIfEmpty(directory: string): Promise<void> {
+  try {
+    const entries = await readdir(directory);
+    if (entries.length === 0) {
+      await removePath(directory);
+    }
+  } catch {
+    // Missing already — nothing to prune.
+  }
+}
+
+/**
+ * Add the skill to `CLAUDE.md`'s imports.
+ *
+ * Belt and braces alongside `.claude/skills/`: an agent that only reads
+ * `CLAUDE.md` still finds the guide, and the import makes it discoverable to a
+ * human skimming the file. Idempotent.
+ */
+async function referenceSkillFromClaudeMd(projectRoot: string): Promise<void> {
+  const claudeMdPath = join(projectRoot, "CLAUDE.md");
+  const reference = `@.agents/skills/${SHIPPED_SKILL}/SKILL.md`;
+
+  let contents = "";
+  try {
+    contents = await readFile(claudeMdPath, "utf8");
+  } catch {
+    // No CLAUDE.md in the template — create one rather than skip the wiring.
+  }
+  if (contents.includes(reference)) {
+    return;
+  }
+  const separator = contents.length === 0 || contents.endsWith("\n") ? "" : "\n";
+  await writeTextFile(claudeMdPath, `${contents}${separator}${reference}\n`);
+}
+
 /**
  * How each package manager runs a published binary without installing it.
  *
@@ -167,7 +257,7 @@ export async function removeBunArtifacts(
  * is simply an unknown command. `npx` ships with Node, so it works for every
  * yarn user regardless of major version.
  */
-const PACKAGE_RUNNER: Record<PackageManager, string> = {
+export const PACKAGE_RUNNER: Record<PackageManager, string> = {
   bun: "bunx",
   pnpm: "pnpm dlx",
   yarn: "npx",
