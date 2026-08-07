@@ -37,6 +37,11 @@ All notable changes to `create-notils` are documented here. The format follows
 
 ### Added
 
+- **The template now has its own version**, in `template-version.json`, separate
+  from either CLI's npm version. Both CLIs read it, so they always fetch the same
+  tag while versioning independently — a CLI with no changes no longer publishes a
+  no-op release just to stay in step. (`@notils/cli` stays at 0.3.2 for this
+  release: nothing in it changed.)
 - **`--skills` / `--no-skills`**, with an interactive prompt defaulting to yes.
   Declining removes the skill and prunes the empty directories, so a project that
   does not want agent context carries no trace of it.

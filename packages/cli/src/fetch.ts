@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import tiged from "tiged";
 
+import templateVersion from "../../../template-version.json" with { type: "json" };
+
 /**
  * Fetch one package's source from the template repository.
  *
@@ -15,27 +17,31 @@ import tiged from "tiged";
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
 
 /**
- * Resolve the template ref for a given CLI version.
+ * The git tag package source is fetched from.
  *
- * **The CLI's own version IS the template tag** — `@notils/cli@0.3.0` fetches
- * `v0.3.0`. That makes a given CLI version reproducible: it always writes the
- * same source, however long ago it was published. Users still get current source
- * by default, because `bunx @notils/cli` resolves the newest published CLI.
+ * This is the TEMPLATE's version, from `template-version.json` at the repo root
+ * — **not this CLI's npm version**. An earlier design derived it as
+ * `v${cliVersion}`, which welded the two together: bumping the template forced a
+ * no-op release of this CLI, and vice versa. They change for different reasons
+ * and now version independently. Both CLIs read the same file, so they can never
+ * disagree about which tag they target.
  *
- * RELEASE REQUIREMENT: this couples the CLI version to a git tag of this repo.
- * Publishing `@notils/cli@X.Y.Z` requires a pushed `vX.Y.Z` tag, or every `add`
- * from that version fails at the fetch step. See docs/testing-locally.md.
+ * Inlined at build time (a published CLI has no repo to read from).
+ *
+ * RELEASE REQUIREMENT: the tag named here must exist and be pushed, or every
+ * `add` fails at the fetch step. `check:publishable` verifies this before a
+ * publish can proceed. See docs/testing-locally.md.
  *
  * Override with NOTILS_TEMPLATE_REF to test against a branch.
  */
-export function templateRef(cliVersion: string): string {
-  return process.env.NOTILS_TEMPLATE_REF ?? `v${cliVersion}`;
+export function templateRef(): string {
+  return process.env.NOTILS_TEMPLATE_REF ?? templateVersion.ref;
 }
 
 /** Fetch `packages/<name>` into a fresh temp directory and return its path. */
-export async function fetchPackageSource(packageName: string, cliVersion: string): Promise<string> {
+export async function fetchPackageSource(packageName: string): Promise<string> {
   const destination = await mkdtemp(join(tmpdir(), `notils-add-${packageName}-`));
-  const source = `${TEMPLATE_REPOSITORY}/packages/${packageName}#${templateRef(cliVersion)}`;
+  const source = `${TEMPLATE_REPOSITORY}/packages/${packageName}#${templateRef()}`;
   const emitter = tiged(source, { cache: false, force: true, mode: "tar" });
   try {
     await emitter.clone(destination);
@@ -49,7 +55,7 @@ export async function fetchPackageSource(packageName: string, cliVersion: string
     throw new Error(
       `Could not fetch "${packageName}" from ${source}.\n` +
         `  ${detail}\n` +
-        `  Check that the ref "${templateRef(cliVersion)}" exists in ${TEMPLATE_REPOSITORY}.`
+        `  Check that the ref "${templateRef()}" exists in ${TEMPLATE_REPOSITORY}.`
     );
   }
   return destination;

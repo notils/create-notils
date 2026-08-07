@@ -274,38 +274,41 @@ through an agent or a scripted/non-interactive shell.
 > `node_modules` (`tsup` isn't installed). Publishing the already-built
 > tarball file skips lifecycle scripts entirely and avoids that.
 
-### Two packages, one tag
+### Three version numbers, and what each one means
 
-There are now **two** published packages, and both resolve template content from
-the same git tag:
+This trips people up, so be precise about which is which:
 
-| package | version source of its ref |
-| --- | --- |
-| `create-notils` | `TEMPLATE_REF` in `src/scaffold.ts` — a hand-edited constant |
-| `@notils/cli` | its own `version` field — **automatic**, see `src/fetch.ts` |
+| number | lives in | changes when |
+| --- | --- | --- |
+| **template version** | `template-version.json` (repo root) | the *template* changes — app code, packages, the shipped skill |
+| `create-notils` version | `packages/create-notils/package.json` | the *scaffolder CLI* changes |
+| `@notils/cli` version | `packages/cli/package.json` | the *add/init/list CLI* changes |
 
-They therefore **share a version number and a tag**. Releasing `X.Y.Z` means one
-`vX.Y.Z` tag that both packages fetch from. Skipping the tag doesn't just make
-the template stale — for `@notils/cli` it's fatal: every `add` fails with
-"could not find commit hash for vX.Y.Z".
+**Both CLIs read the template version from that one file** and inline it at build
+time. So they always agree on which tag to fetch, while versioning independently
+— a CLI with no changes of its own never publishes a no-op release.
+
+> An earlier design derived `@notils/cli`'s ref as `v${cliVersion}`, welding the
+> two together. That forced a no-op 0.4.0 of the CLI just because the template
+> changed. Don't reintroduce it.
 
 Release steps:
 
-1. Bump `version` in **both** `packages/create-notils/package.json` and
-   `packages/cli/package.json` to the same `X.Y.Z`.
-2. Set `TEMPLATE_REF` in `packages/create-notils/src/scaffold.ts` to `vX.Y.Z`.
-   (`@notils/cli` needs no edit — it derives the ref from its version.)
-3. Add a `## X.Y.Z` section to **both** CHANGELOGs.
+1. Bump `ref` in `template-version.json` to the tag you're about to cut, **if the
+   template changed**. If only a CLI changed, leave it alone.
+2. Bump `version` in whichever package(s) actually changed. Leave the others.
+3. Add a `## X.Y.Z` section to the CHANGELOG of each package you bumped.
 4. Commit, then tag with the full release notes, not a one-liner:
    `git tag -a vX.Y.Z -F <notes-file>` — then `git push origin main --tags`.
-   **Push the tag before publishing**, so the fetch step can resolve it.
-5. Publish each package: `cd packages/create-notils && bun publish`, then
-   `cd packages/cli && bun publish`.
-6. Verify both against the real tag:
+   **Push the tag before publishing**, or every fetch fails with "could not find
+   commit hash". `check:publishable` blocks the publish if the tag is missing or
+   unpushed, but pushing first is the habit to keep.
+5. Publish only the packages you bumped: `cd packages/<pkg> && bun publish`.
+6. Verify against the real tag:
    - `create-notils`: scaffold a test project, confirm the fetch shows
      `notils/create-notils#vX.Y.Z`.
-   - `@notils/cli`: in a scratch project, `bunx @notils/cli@X.Y.Z add api-client --dry-run -y`
-     — the fetch step is what you're checking.
+   - `@notils/cli`: in a scratch project, `bunx @notils/cli add api-client -y`,
+     then check `notils.json`'s `installed.*.ref` — that is the tag it used.
 7. Create the GitHub Release (`gh release create vX.Y.Z --notes-file <notes>`);
    the git tag's annotation is separate from what renders on the Releases page.
 8. **Install the published artifacts from npm and run them.** Not optional — see

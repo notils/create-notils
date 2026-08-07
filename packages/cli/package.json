@@ -1,6 +1,6 @@
 {
   "name": "@notils/cli",
-  "version": "0.4.0",
+  "version": "0.3.2",
   "description": "Add production-ready capabilities (UI kit, auth, form-builder) to any Next.js project — scaffolded with create-notils or your own.",
   "type": "module",
   "bin": {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { copyDirectoryIfExists } from "@notils/transform/filesystem";
 import { getCommandOutput } from "@notils/transform/process";
 
+import templateVersion from "../../../template-version.json" with { type: "json" };
 import type { PackageManager } from "./config.js";
 import {
   readJsonFile,
@@ -15,10 +16,18 @@ import {
 } from "./filesystem.js";
 
 // The template is the create-notils repository itself, pinned to a release tag
-// for reproducible scaffolds. Bump this when cutting a new template release.
+// for reproducible scaffolds.
+//
+// The tag comes from `template-version.json` at the repo root — the TEMPLATE's
+// own version, deliberately independent of this CLI's npm version. Both CLIs
+// read that one file, so they can never point at different tags, and a CLI with
+// no changes of its own never has to publish a no-op release just to stay in
+// step. It is inlined at build time (verified: the value is baked into dist,
+// with no filesystem read), because a published CLI has no repo to read from.
+//
 // Override with NOTILS_TEMPLATE_REF for local testing against a branch.
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.4.0";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? templateVersion.ref;
 
 /**
  * Paths inside the template that must NEVER end up in a scaffolded project.

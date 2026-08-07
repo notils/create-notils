@@ -42,10 +42,10 @@ function wrap(text: string, width: number): string[] {
  * read-only query and shouldn't prompt or write. Without config it just lists
  * what's available and says how to get the installed column.
  */
-export async function runList(projectRoot: string, cliVersion: string): Promise<void> {
+export async function runList(projectRoot: string): Promise<void> {
   const config = await readProjectConfig(projectRoot);
   const addable = INTERNAL_PACKAGES.filter((pkg) => pkg.addable);
-  const currentRef = templateRef(cliVersion);
+  const currentRef = templateRef();
 
   const lines: string[] = [];
   let outdatedCount = 0;

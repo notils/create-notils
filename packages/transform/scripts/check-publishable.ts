@@ -90,6 +90,45 @@ for (const directory of CLI_PACKAGES) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The template ref both CLIs fetch must exist as a pushed tag. If it doesn't,
+// every `create-notils` scaffold and every `notils add` fails at the fetch step
+// — at runtime, for users, with nothing catching it before publish.
+// ---------------------------------------------------------------------------
+console.log("\n=== template ref ===");
+{
+  const templateVersion = JSON.parse(
+    await readFile(join(repoRoot, "template-version.json"), "utf8")
+  ) as { ref?: string };
+  const ref = templateVersion.ref;
+
+  if (!ref) {
+    fail("template-version.json has no `ref`");
+  } else {
+    // `git rev-parse <ref>^{}` resolves an annotated tag to its commit and exits
+    // non-zero if the ref does not exist locally.
+    const resolved = Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", `${ref}^{}`], {
+      cwd: repoRoot,
+    });
+    if (resolved.exitCode !== 0) {
+      fail(`template ref "${ref}" is not a tag in this repo — create it before publishing`);
+    } else {
+      ok(`template ref "${ref}" exists locally`);
+      // Local-only is not enough: the CLIs fetch from GitHub, so an unpushed tag
+      // still fails for every user.
+      const remote = Bun.spawnSync(["git", "ls-remote", "--tags", "origin", ref], {
+        cwd: repoRoot,
+      });
+      const pushed = remote.exitCode === 0 && remote.stdout.toString().trim().length > 0;
+      if (pushed) {
+        ok(`template ref "${ref}" is pushed to origin`);
+      } else {
+        fail(`template ref "${ref}" is NOT pushed — users would get "could not find commit hash"`);
+      }
+    }
+  }
+}
+
 console.log(
   failures === 0
     ? "\nall publishable checks passed"

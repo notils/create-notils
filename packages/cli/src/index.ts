@@ -38,12 +38,12 @@ async function main(): Promise<void> {
       break;
 
     case "list":
-      await runList(projectRoot, cliVersion);
+      await runList(projectRoot);
       outro(pc.dim("Add one with `notils add <name>`."));
       break;
 
     case "add":
-      await runAdd(projectRoot, parsed.packages, parsed.options, cliVersion);
+      await runAdd(projectRoot, parsed.packages, parsed.options);
       outro(pc.green("Done."));
       break;
   }

@@ -461,11 +461,18 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   `lint:fix`/`format` script, for the same reason `create-notils` does:
   rewriting specifiers changes their sort order.
 
-- **`@notils/cli`'s VERSION IS ITS TEMPLATE REF.** `@notils/cli@X.Y.Z` fetches
-  package source from tag `vX.Y.Z`. **Publishing it requires a pushed `vX.Y.Z`
-  tag**, or every `add` from that version dies at the fetch step. This is the
-  easiest release mistake to make — see
+- **The template ref comes from `template-version.json`, NOT from any package's
+  version.** Both CLIs read that one file and inline it at build time, so they
+  can never disagree about which tag to fetch, and each package versions by its
+  own changes. **The tag it names must exist and be pushed** or every fetch dies
+  with "could not find commit hash"; `check:publishable` blocks a publish when it
+  doesn't. Three numbers, three meanings — see
   [docs/testing-locally.md](../../../docs/testing-locally.md).
+
+  > Don't reintroduce `templateRef(cliVersion) => \`v${cliVersion}\``. That
+  > welded the CLI's npm version to the template tag, so a template-only change
+  > forced a no-op release of a CLI that hadn't changed — and a future package
+  > would have to start at whatever number the others had reached.
 - **`add ui` offers the theme token layer** when the project has no `--primary`,
   because the components reference `bg-primary` etc. and render unstyled without
   it. The block is extracted from the fetched `ui` package's own `globals.css`

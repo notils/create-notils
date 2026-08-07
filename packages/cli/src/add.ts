@@ -22,8 +22,7 @@ import { applyPlan, type PackagePlan, planPackage } from "./write-package.js";
 export async function runAdd(
   projectRoot: string,
   requested: string[],
-  options: AddOptions,
-  cliVersion: string
+  options: AddOptions
 ): Promise<void> {
   const config = await loadOrInitConfig(projectRoot, { yes: options.yes });
 
@@ -38,7 +37,7 @@ export async function runAdd(
     );
   }
 
-  const { plans, themeLayer } = await planAll(projectRoot, resolved, config, cliVersion);
+  const { plans, themeLayer } = await planAll(projectRoot, resolved, config);
   const summary = summarize(plans, config);
   note(summary.text, options.dryRun ? "Would write" : "Plan");
 
@@ -113,7 +112,7 @@ export async function runAdd(
     }
   }
 
-  await recordInstalled(projectRoot, atCurrentRef, templateRef(cliVersion));
+  await recordInstalled(projectRoot, atCurrentRef, templateRef());
   await mergeDependencies(projectRoot, plans, options);
   await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
 
@@ -242,8 +241,7 @@ async function formatWritten(projectRoot: string): Promise<void> {
 async function planAll(
   projectRoot: string,
   packages: InternalPackage[],
-  config: NotilsConfig,
-  cliVersion: string
+  config: NotilsConfig
 ): Promise<{ plans: PackagePlan[]; themeLayer: string | null }> {
   const plans: PackagePlan[] = [];
   let themeLayer: string | null = null;
@@ -251,7 +249,7 @@ async function planAll(
 
   for (const pkg of packages) {
     progress.start(`Fetching ${pkg.name}`);
-    const fetched = await fetchPackageSource(pkg.name, cliVersion);
+    const fetched = await fetchPackageSource(pkg.name);
     try {
       plans.push(await planPackage(projectRoot, fetched, pkg, config));
       if (pkg.name === "ui") {
