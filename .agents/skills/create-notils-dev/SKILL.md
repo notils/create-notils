@@ -186,6 +186,30 @@ document `bunx skills add …` instead.
 describes the thing we generate. Everything else — shadcn, better-auth, drizzle,
 zod — is the provider's to maintain and the user's to install.
 
+### Why `notils-project` stays IN THE TEMPLATE rather than being fetched
+
+It's tempting to make the scaffold run `skills add notils/create-notils@notils-project`
+so there's one mechanism for everything. **Don't** — the two fetch different refs:
+
+| path | ref | result |
+| --- | --- | --- |
+| `create-notils@X.Y.Z` | tag `vX.Y.Z` | skill matches the scaffold exactly |
+| `skills add …` | **default branch** | skill is whatever `main` says today |
+
+Verified: a `skills add` of our own skill produced the working-tree copy, not the
+tagged one. So fetching it during scaffold would give a *pinned* template an
+*unpinned* skill — the opposite of reproducible, plus a network round-trip and a
+dependency on `npx`/`skills` being available at scaffold time.
+
+Shipping it in the template keeps `create-notils@X.Y.Z` fully reproducible and
+offline. External users still get it via
+`npx skills add notils/create-notils@notils-project`, which **already works** —
+the repo is public and the skill is in it, so there is nothing to publish.
+
+Note also that `skills-lock.json` records `source` + `computedHash`, **not a
+version** — so "pin notils-project to 1.4.0" isn't expressible in that format
+today. Don't design around versions it doesn't have.
+
 - **`notils-project`** — the **client skill shipped to the generated app** (`.agents/skills/notils-project/`). It is the *generated project's* specification: architecture, layout, rules, patterns, verification. It deliberately says nothing about create-notils internals, the scaffold CLI, or repo development. When you change a convention that affects generated projects (Base UI usage, theming, ui-package workflow), update **both** skills. When you change something internal-only (CLI, release process), update only this one.
 
   **Do not confuse the two names.** The shipped skill is `notils-project`; THIS skill is `create-notils-dev`. They were both once called `notils-project`, which is why the internal one was renamed — the shipped name is the one that had to be right, since users see it and `notils` itself is reserved for the AI communication platform's own future skill.

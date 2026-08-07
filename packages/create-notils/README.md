@@ -81,6 +81,29 @@ bun run ui:add button --overwrite   # update in place; review the git diff
 
 See the generated `AGENTS.md` and the `notils-project` skill in the project for conventions.
 
+## AI agent context
+
+Every scaffold ships the **`notils-project`** skill — the specification an agent
+reads to understand the project's architecture, rules, and patterns. It lands in
+both `.agents/skills/` (tool-agnostic) and `.claude/skills/` (Claude Code), and
+is referenced from `CLAUDE.md`. Skip it with `--no-skills`.
+
+Skills for the libraries in the stack are maintained by their own authors, not
+vendored here. Install them with the [`skills`](https://www.npmjs.com/package/skills)
+CLI, which uses the same `.agents/skills/` convention:
+
+```bash
+bunx skills add shadcn-ui/ui   # shadcn/ui component + composition rules
+bunx skills find <query>       # search
+```
+
+**Using these conventions without `create-notils`?** The skill installs standalone
+in any project — Next.js, Vite, Expo:
+
+```bash
+npx skills add notils/create-notils@notils-project
+```
+
 ## Requirements
 
 - Node.js ≥ 20 (the CLI); the scaffolded project targets Node ≥ 18.

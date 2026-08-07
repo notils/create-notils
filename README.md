@@ -123,6 +123,25 @@ bun install
 bun run dev
 ```
 
+### Use these conventions in a project you already have
+
+The `notils-project` skill — the specification an AI agent reads to understand
+this stack's architecture, rules, and patterns — is installable on its own, in
+**any** project. Plain Next.js, Vite, Expo, whatever:
+
+```bash
+npx skills add notils/create-notils@notils-project
+```
+
+That uses the [`skills`](https://www.npmjs.com/package/skills) CLI, which writes
+into `.agents/skills/`, links it into `.claude/skills/` for Claude Code, and
+records it in `skills-lock.json` so it's reproducible and updatable
+(`skills update`).
+
+Projects scaffolded by `create-notils` already have it — it ships with the
+template, pinned to the same tag as the rest of your scaffold, so no network
+fetch is needed and the skill always matches the code it describes.
+
 ---
 
 ## Working with UI components

@@ -181,8 +181,10 @@ const SHIPPED_SKILL = "notils-project";
  *
  * Only OUR skill is handled here. Third-party skills (shadcn, better-auth, zod,
  * drizzle, …) are deliberately NOT vendored — a copy of someone else's skill
- * goes stale silently and isn't ours to keep current. They're fetched from their
- * own upstreams on request via `notils add skill:<name>`.
+ * goes stale silently and isn't ours to keep current. Users install those with
+ * the `skills` CLI (`bunx skills add shadcn-ui/ui`), which uses this same
+ * `.agents/skills/` convention and records them in `skills-lock.json`. We do not
+ * reimplement that; see the create-notils-dev skill for why.
  */
 export async function configureSkills(projectRoot: string, includeSkills: boolean): Promise<void> {
   const agentsSkill = join(projectRoot, ".agents", "skills", SHIPPED_SKILL);
