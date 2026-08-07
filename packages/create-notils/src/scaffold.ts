@@ -57,6 +57,9 @@ export const PATHS_TO_STRIP = [
   ".claude/settings.json",
   // Design docs that describe building create-notils itself.
   "docs",
+  // Our own release metadata — which tag the CLIs fetch. Meaningless in a
+  // scaffolded project, and confusing next to its own package.json version.
+  "template-version.json",
   // Changelogs document create-notils's history, not the user's project.
   "CHANGELOG.md",
 ];
