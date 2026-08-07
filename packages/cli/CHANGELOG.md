@@ -4,6 +4,28 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+### Fixed
+
+- **`add` fetched package source from the wrong tag.** The template ref was
+  derived from this CLI's own npm version (`@notils/cli@0.3.2` → tag `v0.3.2`),
+  so the CLI stayed pinned to whatever template shipped alongside it — silently
+  drifting further behind as the template moved on, with no way to tell from the
+  outside.
+
+  The ref now comes from `template-version.json`, the template's own version,
+  which both CLIs read. `notils.json` records the tag each package was written
+  from, so `list` can report drift accurately.
+
+### Changed
+
+- **This CLI's version and the template's version are now independent.** They
+  change for different reasons: this one when the CLI changes, the template's
+  when the template does. Neither forces a no-op release of the other, and a
+  future `@notils/*` package can start at `0.1.0` instead of inheriting whatever
+  number the others happened to reach.
+
 ## 0.3.2
 
 ### Fixed
