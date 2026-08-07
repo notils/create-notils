@@ -111,29 +111,48 @@ to target Radix, while this stack is Base UI (composition via `render`, not
 project. That's tolerable — but we should not claim they interoperate seamlessly
 until it's tested.
 
-## What a Better Auth provider must prove
+## Spike results — Better Auth against the contract
 
-Before `@notils/auth-better-auth` is worth building, spike these. Each is a real
-possible mismatch, not a formality:
+Spiked against `better-auth@1.6.26` by writing a real adapter and letting `tsc`
+judge it, rather than reading types and predicting. **It typechecks clean against
+the unmodified contract** — so `auth-core` needs no changes for Tier 1.
 
-1. **`useSession` shape.** Better Auth's client hook returns its own
-   `{ data, isPending, error }`. `AuthSession` is `{ status, user }`. Adaptable,
-   but confirm the loading/refetch semantics survive translation.
-2. **Server-side session.** Better Auth's strength is server components and route
-   handlers. `AuthContract` is a client-side hook contract. Determine whether the
-   provider needs a server-side surface too, or whether `ProtectedRoute`'s
-   client gating is enough — this is the most likely place the contract proves
-   too narrow.
-3. **Errors.** `auth-custom` deliberately distinguishes a `ZodError` (schema
-   mismatch — a bug, throws) from an `HttpError` (network/credential failure —
-   returned as `AuthResult`). Better Auth's error surface must map onto that
-   split without collapsing it.
-4. **Sign-up field mismatch.** `AuthContract` is generic over the caller's Zod
-   schemas. Better Auth has its own field expectations. Confirm the generics
-   still infer without hand-written annotations at the call site.
+| Risk | Result |
+| --- | --- |
+| **`useSession` shape** | ✅ `{ data, isPending, isRefetching, error, refetch }` → `{ status, user }` is a mechanical map. `isPending` → `loading`; `data.user` present → `authenticated`. |
+| **Errors** | ✅ `BetterFetchError extends Error`, so `error.message` → `AuthResult`. The throw-vs-return split (below) survives. |
+| **Generics** | ✅ Inferred with no hand annotations. Better Auth's user carries extra fields; narrowing to the caller's declared shape works. |
+| **Server-side session** | ⚠️ A real gap — see below. |
 
-If (2) forces a server-side addition to the contract, that is worth knowing
-**before** writing the provider, because it changes `auth-core`.
+### The server-side gap, and the decision
+
+`better-auth/api` exposes `getSession`, `getSessionFromCtx`, `createAuthEndpoint`,
+`createAuthMiddleware`, and `APIError` — a substantial server-side surface with
+**no counterpart in `AuthContract`**, which is a client-side hook contract by
+construction.
+
+This matters: Better Auth's main draw is server components and route handlers —
+checking a session *before* rendering. A user going through `auth-ui` alone gets
+client-side gating via `ProtectedRoute` and loses the thing they chose Better Auth
+for.
+
+**Decision: keep the contract client-only; export server helpers separately.**
+
+```
+@notils/auth-better-auth exports:
+  createBetterAuthContract()   ← satisfies AuthContract (Tier 1, works with auth-ui)
+  getServerSession()           ← Better Auth only, outside the contract
+  createAuthHandler()          ← Better Auth only, outside the contract
+```
+
+Rejected: adding an optional `getServerSession?` to `AuthContract`. It would put a
+field on every provider that a hand-rolled Rust or Express backend cannot
+meaningfully implement, and `auth-ui` can't depend on something optional anyway —
+so it would add surface without buying uniformity.
+
+This mirrors the Tier 1 / Tier 2 boundary exactly: the contract carries what every
+provider can implement, and provider-specific power is reached by using that
+provider directly.
 
 ## Non-goals
 
