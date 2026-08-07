@@ -84,19 +84,19 @@
     },
     "packages/cli": {
       "name": "@notils/cli",
-      "version": "0.1.0",
+      "version": "0.3.1",
       "bin": {
         "notils": "./dist/index.js",
       },
       "dependencies": {
         "@clack/prompts": "^1.6.0",
-        "@notils/transform": "workspace:*",
         "commander": "^15.0.0",
         "picocolors": "^1.1.1",
         "tiged": "^2.12.8",
       },
       "devDependencies": {
         "@notils/config": "workspace:*",
+        "@notils/transform": "workspace:*",
         "@types/node": "^24.13.3",
         "tsup": "^8.5.1",
         "typescript": "^6.0.3",
@@ -108,19 +108,19 @@
     },
     "packages/create-notils": {
       "name": "create-notils",
-      "version": "0.2.0",
+      "version": "0.3.1",
       "bin": {
         "create-notils": "./dist/index.js",
       },
       "dependencies": {
         "@clack/prompts": "^1.6.0",
-        "@notils/transform": "workspace:*",
         "commander": "^15.0.0",
         "picocolors": "^1.1.1",
         "tiged": "^2.12.8",
       },
       "devDependencies": {
         "@notils/config": "workspace:*",
+        "@notils/transform": "workspace:*",
         "@types/node": "^24.13.3",
         "tsup": "^8.5.1",
         "typescript": "^6.0.3",

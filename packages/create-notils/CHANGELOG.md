@@ -4,6 +4,21 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.1
+
+### Fixed
+
+- **Every install of 0.3.0 failed** with
+  `GET https://registry.npmjs.org/@notils%2ftransform - 404`. Both CLIs
+  declared the private, never-published `@notils/transform` as a runtime
+  dependency. The published bundle was fine — it inlines that code at build
+  time — but the manifest still asked npm to fetch a package that does not
+  exist. Moved to `devDependencies`, where a build-time-only dependency
+  belongs.
+- A `check:publishable` guard now runs from `prepublishOnly` in both
+  packages, so a `workspace:` range or an unpublished `@notils/*` package
+  in `dependencies` aborts the publish instead of shipping.
+
 ## 0.3.0
 
 ### Added

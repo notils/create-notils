@@ -18,7 +18,8 @@
     "lint": "biome lint .",
     "lint:fix": "biome check . --write",
     "lint:unsafe": "biome check . --write --unsafe",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "check:publishable": "bun run scripts/check-publishable.ts"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",

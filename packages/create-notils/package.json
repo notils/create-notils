@@ -1,6 +1,6 @@
 {
   "name": "create-notils",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Scaffold a production-ready Next.js project (Turborepo + Bun + Tailwind v4 + shadcn/ui on Base UI + Biome) as a monorepo or a standalone app, in one command.",
   "type": "module",
   "bin": {
@@ -39,17 +39,17 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run --cwd ../transform check:publishable && bun run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.6.0",
-    "@notils/transform": "workspace:*",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
     "tiged": "^2.12.8"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
+    "@notils/transform": "workspace:*",
     "@types/node": "^24.13.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3"
