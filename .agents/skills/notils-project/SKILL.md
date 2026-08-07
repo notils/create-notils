@@ -432,10 +432,28 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   projects have all five packages on disk with no record, and reporting those as
   missing would be plainly wrong.
 
+- **Scaffolds get a `notils` SCRIPT, never a dependency** (`addNotilsScript` in
+  `scaffold.ts`): `"notils": "bunx @notils/cli"`, with the runner matched to the
+  chosen package manager (`npx` for npm **and yarn** — `yarn dlx` is Berry-only
+  and a bare `yarn` is still Classic on most machines; `pnpm dlx` for pnpm).
+  Do NOT "improve" this into a devDependency: it would pin a version that goes
+  stale, defeating the whole point that a fix reaches every project including
+  ones scaffolded long ago, and add transitive deps for a tool run a handful of
+  times. The script exists purely so someone reading `package.json` finds it.
+
 `add`, `init`, and `list` are all feature-complete against
 [docs/ROADMAP.md](../../../docs/ROADMAP.md). **`@notils/cli` has never been
 published** — that's the remaining work, and it needs the version/tag lockstep
 above.
+
+### Releasing: two packages, ONE tag
+
+`create-notils` and `@notils/cli` **share a version and a git tag**, because both
+resolve template content from it — `create-notils` via the hand-edited
+`TEMPLATE_REF`, `@notils/cli` automatically from its own version. Full steps in
+[docs/testing-locally.md](../../../docs/testing-locally.md). The trap: publishing
+`@notils/cli@X.Y.Z` without a pushed `vX.Y.Z` tag isn't merely stale, it's fatal
+— every `add` from that version dies at the fetch step.
 
 ## Auth architecture — capability/provider split (BUILT: transport + custom-backend provider + Tier 1 UI)
 

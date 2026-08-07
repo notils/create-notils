@@ -16,7 +16,7 @@ import {
 // for reproducible scaffolds. Bump this when cutting a new template release.
 // Override with NOTILS_TEMPLATE_REF for local testing against a branch.
 export const TEMPLATE_REPOSITORY = "notils/create-notils";
-export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.2.0";
+export const TEMPLATE_REF = process.env.NOTILS_TEMPLATE_REF ?? "v0.3.0";
 
 /**
  * Paths inside the template that must NEVER end up in a scaffolded project.
@@ -157,6 +157,50 @@ export async function removeBunArtifacts(
   }
   await replaceInDirectoryTree(projectRoot, [{ find: "bun run --bun ", replaceWith: "" }]);
   await removePath(join(projectRoot, "bun.lock"));
+}
+
+/**
+ * How each package manager runs a published binary without installing it.
+ *
+ * yarn maps to `npx`, not `yarn dlx`: `dlx` is Yarn Berry only, and a bare
+ * `yarn` still resolves to Classic (1.x) on most machines — where `yarn dlx`
+ * is simply an unknown command. `npx` ships with Node, so it works for every
+ * yarn user regardless of major version.
+ */
+const PACKAGE_RUNNER: Record<PackageManager, string> = {
+  bun: "bunx",
+  pnpm: "pnpm dlx",
+  yarn: "npx",
+  npm: "npx",
+};
+
+/**
+ * Add a `notils` script pointing at `@notils/cli` — the tool that adds
+ * capabilities (auth, form-builder, …) to an existing project.
+ *
+ * A SCRIPT, deliberately not a dependency. `@notils/cli` is stateless and is
+ * meant to be run via the package runner, so it always resolves the newest
+ * published version: a fix reaches every project, including ones scaffolded
+ * long ago. A devDependency would pin a version that goes stale and would add
+ * transitive deps to every scaffold for a tool run a handful of times. The
+ * script exists purely for discoverability — someone reading `package.json`
+ * finds it without having read the README.
+ *
+ * Written at the project root in both shapes: that's where `notils.json` lives
+ * and where `add` writes, for a monorepo (`packages/*`) as much as a standalone
+ * project (`src/*`).
+ */
+export async function addNotilsScript(
+  projectRoot: string,
+  packageManager: PackageManager
+): Promise<void> {
+  const packageJsonPath = join(projectRoot, "package.json");
+  const packageJson = await readJsonFile<{ scripts?: Record<string, string> }>(packageJsonPath);
+  packageJson.scripts = {
+    ...packageJson.scripts,
+    notils: `${PACKAGE_RUNNER[packageManager]} @notils/cli`,
+  };
+  await writeJsonFile(packageJsonPath, packageJson);
 }
 
 /**

@@ -274,14 +274,44 @@ through an agent or a scripted/non-interactive shell.
 > `node_modules` (`tsup` isn't installed). Publishing the already-built
 > tarball file skips lifecycle scripts entirely and avoids that.
 
-Before any publish, bump the version and cut a matching **template tag** so the
-published CLI's `TEMPLATE_REF` points at a frozen template snapshot (not `main`):
+### Two packages, one tag
 
-1. Bump `version` in `packages/create-notils/package.json`.
-2. Set `TEMPLATE_REF` in `src/scaffold.ts` to the tag you're about to push (e.g. `v0.1.0`).
-3. Tag with the full release notes, not a one-liner: `git tag -a v0.1.0 -F <notes-file>`, then `git push origin main --tags`.
-4. Build + publish as above.
-5. Verify the tag actually resolves: scaffold a test project with the freshly built CLI and confirm the fetch step shows `notils/create-notils#v<version>` succeeding.
+There are now **two** published packages, and both resolve template content from
+the same git tag:
+
+| package | version source of its ref |
+| --- | --- |
+| `create-notils` | `TEMPLATE_REF` in `src/scaffold.ts` — a hand-edited constant |
+| `@notils/cli` | its own `version` field — **automatic**, see `src/fetch.ts` |
+
+They therefore **share a version number and a tag**. Releasing `X.Y.Z` means one
+`vX.Y.Z` tag that both packages fetch from. Skipping the tag doesn't just make
+the template stale — for `@notils/cli` it's fatal: every `add` fails with
+"could not find commit hash for vX.Y.Z".
+
+Release steps:
+
+1. Bump `version` in **both** `packages/create-notils/package.json` and
+   `packages/cli/package.json` to the same `X.Y.Z`.
+2. Set `TEMPLATE_REF` in `packages/create-notils/src/scaffold.ts` to `vX.Y.Z`.
+   (`@notils/cli` needs no edit — it derives the ref from its version.)
+3. Add a `## X.Y.Z` section to **both** CHANGELOGs.
+4. Commit, then tag with the full release notes, not a one-liner:
+   `git tag -a vX.Y.Z -F <notes-file>` — then `git push origin main --tags`.
+   **Push the tag before publishing**, so the fetch step can resolve it.
+5. Publish each package: `cd packages/create-notils && bun publish`, then
+   `cd packages/cli && bun publish`.
+6. Verify both against the real tag:
+   - `create-notils`: scaffold a test project, confirm the fetch shows
+     `notils/create-notils#vX.Y.Z`.
+   - `@notils/cli`: in a scratch project, `bunx @notils/cli@X.Y.Z add api-client --dry-run -y`
+     — the fetch step is what you're checking.
+7. Create the GitHub Release (`gh release create vX.Y.Z --notes-file <notes>`);
+   the git tag's annotation is separate from what renders on the Releases page.
+
+> `@notils/cli` is scoped, so its first publish needs the `@notils` npm
+> organization to exist and `publishConfig.access: public` (already set) —
+> otherwise npm rejects a scoped package as private.
 
 ## Notes
 

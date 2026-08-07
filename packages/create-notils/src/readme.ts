@@ -9,6 +9,20 @@ function runScriptCommand(packageManager: PackageManager, script: string): strin
 }
 
 /**
+ * Run a package.json script WITH arguments.
+ *
+ * npm and yarn-classic need `--` to stop consuming the arguments themselves;
+ * bun and pnpm forward them as-is. The explicit `run` is for readability — bun
+ * resolves `bun notils list` correctly too (verified), but `run` makes it
+ * obvious this is a package script rather than a subcommand.
+ */
+function runScriptWithArgs(packageManager: PackageManager, script: string, args: string): string {
+  return packageManager === "npm" || packageManager === "yarn"
+    ? `${packageManager} run ${script} -- ${args}`
+    : `${packageManager} run ${script} ${args}`;
+}
+
+/**
  * Overwrite the scaffolded root README with a concise, project-specific one that
  * documents how to run the project and credits the generator. Written for the
  * chosen project type so the paths and commands match what the user actually got.
@@ -76,6 +90,17 @@ ${build}
 \`\`\`
 
 ${layoutSection}
+
+## Adding capabilities
+
+\`\`\`sh
+${runScriptWithArgs(packageManager, "notils", "list")}           # what's available, what's installed
+${runScriptWithArgs(packageManager, "notils", "add auth-ui")}    # add a capability to this project
+\`\`\`
+
+This runs [\`@notils/cli\`](https://www.npmjs.com/package/@notils/cli) through your
+package runner — it is not a dependency, so you always get the current version.
+Everything it writes is your source; delete the directory to remove a capability.
 
 See \`AGENTS.md\` for architecture, conventions, and setup notes (also read by AI coding agents).
 

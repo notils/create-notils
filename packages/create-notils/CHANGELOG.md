@@ -4,6 +4,46 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.0
+
+### Added
+
+- **A companion CLI, [`@notils/cli`](https://www.npmjs.com/package/@notils/cli),
+  for adding capabilities after scaffolding.** `create-notils` runs once; this
+  one runs any time after — and in projects it didn't create. Scaffolds now ship
+  a `notils` script for it:
+
+  ```bash
+  bun run notils list             # what's available, what's installed
+  bun run notils add auth-ui      # add a capability to this project
+  ```
+
+  It is deliberately **not** a dependency — the script just invokes your package
+  runner (`bunx`/`npx`/`pnpm dlx`), so it always resolves the newest published
+  version instead of pinning one that goes stale.
+- **`notils.json`** — records this project's shape, scope, and paths so
+  `@notils/cli` knows where to write. Generated automatically; you shouldn't need
+  to touch it.
+
+### Changed
+
+- **Imports are sorted after scaffolding.** Both shapes rewrite module specifiers
+  (standalone folds `@notils/ui/*` into `@/components/*`; monorepo renames the
+  scope), which changes how those imports sort — so a fresh project used to open
+  with import-sort diagnostics on ~13 files. The scaffold now runs your
+  project's own formatter once dependencies are installed.
+- Workspace imports now sort into their own group, separate from third-party
+  packages, in the shared Biome config.
+
+### Fixed
+
+- Every package in a monorepo scaffold now has `lint`/`lint:fix`/`format`
+  scripts. Turborepo's `lint` task silently skips any package without one, so
+  `bun run lint` at the root had been linting a fraction of the workspace while
+  appearing to cover all of it.
+- The Biome `$schema` version in the generated config now matches the installed
+  Biome, so scaffolds no longer emit a schema-mismatch warning on first lint.
+
 ## 0.2.0
 
 ### Added

@@ -23,6 +23,7 @@ import { initializeGitRepository } from "./git.js";
 import { resetRootMetadata } from "./metadata.js";
 import { writeGeneratedReadme } from "./readme.js";
 import {
+  addNotilsScript,
   alignPackageManagerField,
   configurePnpmWorkspace,
   configurePreCommitHook,
@@ -161,6 +162,10 @@ async function configureProject(
     packageManager: config.packageManager,
     cliVersion,
   });
+
+  // After the shape branch above, so the root package.json it edits is the final
+  // one (both resetRootMetadata and flattenToStandalone rewrite that file).
+  await addNotilsScript(projectRoot, config.packageManager);
 
   await alignPackageManagerField(projectRoot, config.packageManager);
   await removeBunArtifacts(projectRoot, config.packageManager);
