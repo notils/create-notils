@@ -36,6 +36,17 @@ export type PlannedFile = {
 export type PackagePlan = {
   pkg: InternalPackage;
   files: PlannedFile[];
+  /**
+   * External (non-`@notils/*`) dependency NAMES this package declares, read from
+   * its fetched package.json.
+   *
+   * Names only — never the version ranges, which are this monorepo's own pins
+   * and must not propagate into a user's project. Read from source rather than a
+   * hardcoded list in the CLI, because a hardcoded list drifts silently: `ui`
+   * gained `next-themes` and the CLI's copy never learned about it, so a
+   * brownfield `add ui` produced code importing a package it never mentioned.
+   */
+  externalDependencies: string[];
 };
 
 /** Extensions whose module specifiers get rewritten. Everything else copies as-is. */
@@ -266,7 +277,25 @@ export async function planPackage(
   files.push(...(await manifestFilesFor(projectRoot, fetchedRoot, pkg, config)));
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-  return { pkg, files };
+  return {
+    pkg,
+    files,
+    externalDependencies: await readExternalDependencies(fetchedRoot),
+  };
+}
+
+/**
+ * Dependency names the fetched package declares, minus internal `@notils/*`
+ * ones (those are resolved through the package graph instead). Names only —
+ * see `PackagePlan.externalDependencies`.
+ */
+async function readExternalDependencies(fetchedRoot: string): Promise<string[]> {
+  const manifest = await readJson<{ dependencies?: Record<string, string> }>(
+    join(fetchedRoot, "package.json")
+  );
+  return Object.keys(manifest?.dependencies ?? {})
+    .filter((name) => !name.startsWith("@notils/"))
+    .sort();
 }
 
 /**

@@ -52,19 +52,22 @@ export async function runAdd(
     log.message(pc.dim(`  ${issue.remedy}`));
   }
 
-  // Nothing to write doesn't mean nothing to do: the theme gap is independent of
-  // whether the source files are current, so a re-run on an up-to-date project
-  // still offers the tokens it's missing.
+  // Nothing to write doesn't mean nothing to do: missing dependencies and the
+  // theme gap are both independent of whether the source files are current, so
+  // a re-run on an up-to-date project still surfaces them. (A project whose
+  // files are present but whose deps are not still doesn't compile.)
   if (summary.newCount === 0 && summary.modifiedCount === 0) {
     log.success("Source files are already up to date.");
+    await mergeDependencies(projectRoot, plans, options);
     await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
     return;
   }
 
   if (options.dryRun) {
-    // Preview the theme offer too — the whole point of a dry run is to see
-    // everything that would happen, and this is the one step that edits a file
+    // Preview the dependency and theme steps too — the point of a dry run is to
+    // see everything that would happen, and these are the two that touch things
     // the user already had.
+    await mergeDependencies(projectRoot, plans, options);
     await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
     log.info("Dry run — nothing was written.");
     return;
@@ -111,7 +114,7 @@ export async function runAdd(
   }
 
   await recordInstalled(projectRoot, atCurrentRef, templateRef(cliVersion));
-  await mergeDependencies(projectRoot, resolved);
+  await mergeDependencies(projectRoot, plans, options);
   await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
 
   if (written.length > 0 && !options.skipFormat) {
@@ -303,7 +306,11 @@ type PackageJson = {
  * it prints the exact install command so the user's package manager resolves
  * current versions.
  */
-async function mergeDependencies(projectRoot: string, packages: InternalPackage[]): Promise<void> {
+async function mergeDependencies(
+  projectRoot: string,
+  plans: PackagePlan[],
+  options: AddOptions
+): Promise<void> {
   const target = await readJsonFile<PackageJson>(join(projectRoot, "package.json"));
   const present = new Set([
     ...Object.keys(target.dependencies ?? {}),
@@ -312,8 +319,8 @@ async function mergeDependencies(projectRoot: string, packages: InternalPackage[
   ]);
 
   const needed = new Set<string>();
-  for (const pkg of packages) {
-    for (const dependency of EXTERNAL_DEPENDENCIES[pkg.name] ?? []) {
+  for (const plan of plans) {
+    for (const dependency of plan.externalDependencies) {
       if (!present.has(dependency)) {
         needed.add(dependency);
       }
@@ -326,16 +333,88 @@ async function mergeDependencies(projectRoot: string, packages: InternalPackage[
 
   const list = [...needed].sort();
   const manager = await detectPackageManager(projectRoot);
-  log.warn("These packages need dependencies you don't have yet:");
-  log.message(pc.cyan(`  ${manager} add ${list.join(" ")}`));
-  log.message(
-    pc.dim("  Not added automatically — let your package manager resolve current versions.")
+  const command = `${manager} add ${list.join(" ")}`;
+
+  // This is NOT advisory: the files we just wrote import these, so the project
+  // does not compile until they're installed. Say so plainly — it used to read
+  // like the other warnings and was easy to scroll past.
+  log.warn(
+    `${pc.bold(`${list.length} package(s) must be installed`)} — the code just written imports them, so this project will not compile until they are.`
   );
+  for (const dependency of list) {
+    log.message(pc.dim(`  ${dependency}`));
+  }
+
+  if (options.dryRun) {
+    log.info(pc.dim(`  Would offer to run: ${command}`));
+    return;
+  }
+
+  const shouldInstall = options.withDeps
+    ? true
+    : process.stdin.isTTY !== true
+      ? false
+      : await confirmInstall(command, manager);
+
+  if (!shouldInstall) {
+    log.message(pc.cyan(`  ${command}`));
+    log.message(
+      pc.dim(
+        options.withDeps === undefined && process.stdin.isTTY !== true
+          ? "  Not prompting without a terminal — run that, or pass --with-deps next time."
+          : "  Run that before building."
+      )
+    );
+    return;
+  }
+
+  const progress = spinner();
+  progress.start(`Installing with ${manager}`);
+  const ok = await tryRunCommand(manager, ["add", ...list], {
+    workingDirectory: projectRoot,
+    useShell: process.platform === "win32",
+  });
+  if (ok) {
+    progress.stop(`Installed ${list.length} package(s)`);
+  } else {
+    progress.stop("Install failed");
+    log.message(pc.cyan(`  ${command}`));
+    log.message(pc.dim("  Run that yourself to finish the setup."));
+  }
+}
+
+/** Ask before mutating node_modules and the lockfile. */
+async function confirmInstall(command: string, manager: string): Promise<boolean> {
+  log.message(pc.dim(`  ${command}`));
+  const accept = await confirm({
+    message: `Install them with ${manager} now?`,
+    initialValue: true,
+  });
+  if (isCancel(accept)) throw new CancelledError();
+  return accept;
+}
+
+const KNOWN_MANAGERS = new Set(["bun", "pnpm", "yarn", "npm"]);
+
+/**
+ * The package manager that invoked us, from `npm_config_user_agent` — which
+ * bunx, pnpm dlx, yarn dlx and npx all set (format: `bun/1.3.14 npm/? node/…`).
+ *
+ * This is the tiebreak for a project with no `packageManager` field and no
+ * lockfile — a brand-new one, exactly the case where guessing wrong is most
+ * visible. Someone who typed `bunx @notils/cli` should be told `bun add`, not
+ * `npm add`.
+ */
+function invokingPackageManager(): string | null {
+  const agent = process.env.npm_config_user_agent;
+  const name = agent?.split("/")[0]?.trim();
+  return name && KNOWN_MANAGERS.has(name) ? name : null;
 }
 
 /**
- * Which package manager this project uses, from the `packageManager` field or a
- * lockfile. Defaults to npm, the safest guess for an unknown project.
+ * Which package manager this project uses: its declared `packageManager` field,
+ * then its lockfile, then whatever runner invoked us. Defaults to npm — present
+ * on any machine with Node.
  */
 async function detectPackageManager(projectRoot: string): Promise<string> {
   const pkg = await readJsonFile<{ packageManager?: string }>(
@@ -356,21 +435,5 @@ async function detectPackageManager(projectRoot: string): Promise<string> {
       return manager;
     }
   }
-  return "npm";
+  return invokingPackageManager() ?? "npm";
 }
-
-/**
- * External (non-`@notils/*`) runtime dependencies per package.
- *
- * Hardcoded here rather than read from the fetched package.json because the
- * fetched file lists them with the monorepo's own ranges, and this CLI must not
- * propagate pinned versions into a user's project (see the never-hand-pin rule).
- * Keep in sync when a package gains a dependency.
- */
-const EXTERNAL_DEPENDENCIES: Record<string, string[]> = {
-  ui: ["@base-ui/react", "class-variance-authority", "clsx", "lucide-react", "tailwind-merge"],
-  "api-client": [],
-  "auth-custom": ["zod"],
-  "form-builder": ["@hookform/resolvers", "react-hook-form", "zod"],
-  "auth-ui": ["zod"],
-};

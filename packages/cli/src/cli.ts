@@ -20,6 +20,12 @@ export type AddOptions = {
    * setups need an explicit opt-in.
    */
   withTheme?: boolean;
+  /**
+   * Install missing external dependencies without asking. Like `--with-theme`,
+   * not covered by `--yes`: mutating node_modules and the lockfile is a bigger
+   * step than writing source files.
+   */
+  withDeps?: boolean;
 };
 
 export type InitOptions = {
@@ -55,6 +61,10 @@ export function buildProgram(cliVersion: string): Command {
     .option(
       "--with-theme",
       "append the theme tokens to your stylesheet without asking (not covered by --yes)"
+    )
+    .option(
+      "--with-deps",
+      "install missing external dependencies without asking (not covered by --yes)"
     )
     .addHelpText(
       "after",

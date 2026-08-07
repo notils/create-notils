@@ -4,6 +4,31 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.2
+
+### Fixed
+
+- **`add` left brownfield projects uncompilable.** The packages it writes import
+  `@base-ui/react`, `react-hook-form`, `zod` and friends; if the project did not
+  already have them, `add` printed an install command as a passive warning among
+  several others and exited successfully. A project with no shadcn/Base UI setup
+  — the primary use case — was left broken. It now states plainly that the
+  packages are required, and **offers to install them** (`--with-deps` to skip
+  the prompt, like `--with-theme`).
+- **`next-themes` was missing from the reported dependencies**, so `add ui` wrote
+  `theme.tsx`/`theme-toggle.tsx` importing a package it never mentioned. The
+  dependency list was hardcoded in the CLI and had drifted from what the packages
+  actually declare; it is now read from each fetched `package.json` (names only —
+  never the version ranges, which stay yours to resolve), so it cannot drift
+  again.
+- **The install command named the wrong package manager** in a project with no
+  lockfile yet — it said `npm add` even when invoked through `bunx`. Detection
+  now falls back to the runner that invoked the CLI (`npm_config_user_agent`)
+  before defaulting to npm.
+- Missing dependencies and the theme offer are no longer skipped when the source
+  files are already current. A project whose files are present but whose
+  dependencies are not still does not compile, so a re-run surfaces both.
+
 ## 0.3.1
 
 ### Fixed
