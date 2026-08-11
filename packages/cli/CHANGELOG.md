@@ -4,6 +4,27 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0
+
+### Added
+
+- **`add auth-better-auth`** — the new [Better Auth](https://better-auth.com)
+  provider is now installable. `add auth-ui` still defaults to `auth-custom`
+  (your own backend); ask for the other explicitly to use it instead:
+
+  ```sh
+  notils add auth-ui auth-better-auth
+  ```
+
+  Exactly one provider is installed either way — they are alternatives, not
+  layers, so asking for one never drags in the other.
+
+- **`add auth-ui` now pulls in a provider automatically.** The auth UI depends on
+  the contract (`auth-core`) rather than on any particular provider, which is what
+  lets one set of components serve both — but it means `add auth-ui` on its own
+  would have written components with nothing behind them. It now installs a
+  provider alongside.
+
 ## 0.4.0
 
 ### Fixed

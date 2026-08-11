@@ -202,25 +202,49 @@ rather than a prebuilt registry.
       disk with no record, and must not be reported as missing. Covered by
       `check:detection` (record merge, non-clobber, empty list, no-config).
 
-## Then: Better Auth provider
+## Better Auth provider — BUILT
 
-Rationale: the novel integration risk (Better Auth UI likely assumes Radix;
-`@notils/ui` is Base UI) is real and worth confirming hands-on before
-committing the CLI to it — sequenced after `add` exists so this doesn't have
-to also invent the delivery mechanism.
+Full design and spike results:
+[auth-providers-design.md](auth-providers-design.md).
 
-- [ ] Spike: does Better Auth UI's shadcn variant work against Base UI
-      primitives, or does it require re-porting components onto
-      `@notils/ui`? Resolves the open question in
-      [packages-and-providers-architecture.md](packages-and-providers-architecture.md).
-- [ ] `packages/auth-better-auth` — provider:
-  - [ ] Server routes + DB adapter scaffold
-  - [ ] `useAuth()` implementing the same `AuthContract` (Tier 1), wrapping
-        `createAuthClient()`
-  - [ ] Tier 2 components (2FA, passkey, magic link, SSO, sessions/devices)
-        as provider-specific, not forced through `AuthContract`
-- [ ] Scaffold-time prompt: `Add authentication? (No / Better Auth / Custom backend)`
-- [ ] Golden build test extended to cover this provider too.
+- [x] **`@notils/auth-core`** — the contract extracted into its own types-only
+      package. It previously lived in `auth-custom`, so `auth-ui` depended on the
+      *custom-backend provider* to import a type; a Better Auth user would have
+      installed a REST-backend package they don't have. Providers now depend on
+      the contract, never on each other.
+- [x] **Spike before building.** Wrote a real adapter against the unmodified
+      contract and let `tsc` judge it: `useSession`, error mapping, and the
+      generics all fit with no changes to `auth-core`. The one genuine gap was
+      server-side sessions (`better-auth/api` has a server surface a client-side
+      hook contract can't express).
+- [x] **`packages/auth-better-auth`**:
+  - [x] `createBetterAuthContract()` — Tier 1, satisfying `AuthContract`, so the
+        existing `auth-ui` components render against Better Auth unchanged.
+        Verified by wiring the real client through the real components.
+  - [x] `getServerSession()` / `hasServerSession()` — **outside** the contract.
+        Rejected adding an optional `getServerSession?` to `AuthContract`: it
+        would put a field on every provider that a hand-rolled Rust or Express
+        backend can't meaningfully implement.
+  - [x] Tier 2 (2FA, passkey, magic link, SSO, organizations) deliberately NOT
+        wrapped — reached via Better Auth's own plugins or
+        [better-auth-ui](https://better-auth-ui.com).
+- [x] Registered in the package graph with no new logic needed: the
+      `defaultProvider` check is structural, so `add auth-ui auth-better-auth`
+      installs that provider alone while a bare `add auth-ui` still defaults to
+      `auth-custom`.
+
+Remaining:
+
+- [ ] **A runnable example in the template.** `apps/app` wires `auth-custom`
+      against mock routes; there is no equivalent Better Auth wiring (route
+      handler via `toNextJsHandler`, a Drizzle adapter, `.env` keys). Until then
+      the provider is verified by types, not by a booting app.
+- [ ] **Scaffold-time prompt**: `Add authentication? (No / Better Auth / Custom
+      backend)`. Needs the above first — there's nothing to scaffold yet.
+- [ ] **Golden build test** extended to cover a Better Auth scaffold.
+- [ ] Confirm hands-on whether `better-auth-ui`'s shadcn variant targets Radix
+      (it appears to) and what that means in practice for a project mixing it with
+      our Base UI components. Currently documented as a caveat, not a finding.
 
 ## Later (Phase 3/4 territory — not sequenced in detail yet)
 

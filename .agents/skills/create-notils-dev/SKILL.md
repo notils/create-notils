@@ -1,6 +1,6 @@
 ---
 name: create-notils-dev
-description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the auth capability/provider architecture (@notils/api-client, @notils/auth-custom, @notils/auth-ui), the schema-to-form renderer (@notils/form-builder), the package layout, or dependencies. Applies to any work under apps/* or packages/*.
+description: Architecture, conventions, and setup decisions for the create-notils monorepo starter. READ THIS before adding or editing code in this repo — especially before touching the shared @notils/ui package, shadcn/Base UI components, Tailwind v4 theming, the auth capability/provider architecture (@notils/auth-core, @notils/api-client, @notils/auth-custom, @notils/auth-better-auth, @notils/auth-ui), the schema-to-form renderer (@notils/form-builder), the package layout, or dependencies. Applies to any work under apps/* or packages/*.
 ---
 
 # create-notils — project guide
@@ -30,7 +30,9 @@ create-notils/
 │   │   │   └── styles/globals.css  # SINGLE source of truth for theming
 │   │   └── components.json     #   shadcn CLI config (aliases → @notils/ui, base UI)
 │   ├── api-client/             # @notils/api-client — platform-neutral HTTP transport core
-│   ├── auth-custom/            # @notils/auth-custom — custom-backend auth provider (Zod-validated)
+│   ├── auth-core/              # @notils/auth-core — the AuthContract (types only, no deps)
+│   ├── auth-custom/            # @notils/auth-custom — provider: your own backend (Zod-validated)
+│   ├── auth-better-auth/       # @notils/auth-better-auth — provider: Better Auth + server helpers
 │   ├── form-builder/           # @notils/form-builder — recursive Zod-schema-to-form renderer (Base UI)
 │   ├── auth-ui/                # @notils/auth-ui — Tier 1 auth UI (SignInForm, SignUpForm, ...), AuthContract-driven
 │   ├── create-notils/          # the published scaffolder CLI (`npm create notils`)
@@ -572,11 +574,34 @@ does auth" are both real, common cases that need different generated code.
   orgs — is NOT YET BUILT and is provider-specific by design (a custom
   backend usually doesn't implement these the same way, if at all); it will
   only scaffold with the Better Auth provider.
-- **Better Auth provider** — NOT YET BUILT. Server config + client + Better
-  Auth UI. Open risk to verify hands-on before building: Better Auth UI's
-  shadcn variant likely assumes Radix; this repo is on Base UI (see "Base UI
-  vs Radix" above) — may need re-porting its components rather than dropping
-  them in directly.
+- **`packages/auth-core`** (`@notils/auth-core`) — BUILT. **The contract, types
+  only, zero runtime deps.** It used to live in `auth-custom`, which meant
+  `auth-ui` depended on the *custom-backend provider* just to import a type — a
+  Better Auth user would install a REST-backend package they don't have.
+  **Providers depend on the contract, never on each other**; install `auth-ui`
+  plus exactly one provider.
+- **`packages/auth-better-auth`** (`@notils/auth-better-auth`) — BUILT.
+  `createBetterAuthContract()` adapts Better Auth's React client to
+  `AuthContract`, so the existing `auth-ui` components render against Better Auth
+  unchanged. Two things about it that are deliberate:
+  - **Server helpers (`getServerSession`, `hasServerSession`) sit OUTSIDE the
+    contract.** `better-auth/api` has a real server surface with no counterpart
+    in a client-side hook contract, and server-side sessions are much of why
+    anyone picks Better Auth. Adding an optional `getServerSession?` to
+    `AuthContract` was **rejected**: it would put a field on every provider that
+    a hand-rolled Rust or Express backend can't meaningfully implement, and
+    `auth-ui` can't depend on something optional anyway.
+  - **The Better Auth client is injected, not constructed.** That's where a
+    project wires plugins (two-factor, organization, passkey); constructing it
+    internally would drop those or force us to proxy every option. Likewise
+    headers are passed into the server helpers rather than importing
+    `next/headers`, which would make the package Next-only.
+
+  Full design + spike results:
+  [docs/auth-providers-design.md](../../../docs/auth-providers-design.md).
+  **Still missing: a runnable example in the template** — `apps/app` wires
+  `auth-custom` against mock routes and there is no Better Auth equivalent, so
+  the provider is currently verified by types, not by a booting app.
 - **The `add` command** — **BUILT** as a separate `@notils/cli` package (bin
   `notils`), run via `bunx` and never installed into the target project. It was
   sequenced ahead of the Better Auth provider precisely so that provider has a

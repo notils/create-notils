@@ -4,6 +4,56 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0
+
+### Added
+
+- **A second auth provider: [Better Auth](https://better-auth.com)**
+  (`@notils/auth-better-auth`). For projects that would rather not run an auth
+  server — it works in-process with Next.js, with its own database adapters
+  (Drizzle, Prisma, …).
+
+  **The same auth components work with either provider.** `SignInForm`,
+  `SignUpForm`, `ProtectedRoute` and `SessionStatus` render against Better Auth
+  exactly as they do against your own backend — no second set of components, no
+  provider-specific UI:
+
+  ```ts
+  // your own Rust/Express/Go auth API
+  export const auth = createAuthContract(config, anonymousHttp, authedHttp);
+
+  // …or Better Auth, same components downstream
+  export const auth = createBetterAuthContract({ client, mapUser });
+  ```
+
+  Use exactly **one** provider — they are alternatives, not layers.
+
+  It also ships `getServerSession()` / `hasServerSession()` for server components
+  and route handlers, which is much of the point of Better Auth. Those sit
+  *outside* the shared contract deliberately: a hand-rolled auth backend can't
+  implement a server-side session read, and forcing it into the contract would
+  make the contract unimplementable for the projects `auth-custom` exists for.
+
+- **`@notils/auth-core`** — the auth contract as its own types-only package.
+  Previously it lived inside `auth-custom`, which meant the auth UI depended on
+  the *custom-backend provider* just to import a type; a Better Auth user would
+  have installed a REST-backend package they don't have. Providers now depend on
+  the contract, never on each other.
+
+### Notes
+
+- Provider-specific flows — 2FA, passkeys, magic links, SSO, organizations — are
+  deliberately not in the shared contract. Reach for the provider's own API, or
+  [better-auth-ui](https://better-auth-ui.com) for Better Auth, when you need
+  them.
+- Your auth provider and where your business logic lives are **independent
+  choices**. Remote auth with local Drizzle logic is as valid as Better Auth
+  alongside a separate service. Nothing in these packages assumes either.
+- The Better Auth provider is verified by types and by wiring the real client
+  through the real components; the template does not yet ship a runnable Better
+  Auth example app (the scaffolded example still wires `auth-custom` against mock
+  routes). Tracked in the roadmap.
+
 ## 0.4.0
 
 ### Fixed

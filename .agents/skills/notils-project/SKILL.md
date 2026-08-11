@@ -45,7 +45,9 @@ The **component source, theme, `cn()`, and conventions are identical in both** �
 │   │   ├── hooks/
 │   │   └── styles/globals.css  # canonical theme
 │   ├── api-client/         # HTTP transport core (createHttpClient, HttpError)
-│   ├── auth-custom/        # auth provider for your own backend
+│   ├── auth-core/          # the auth contract (types only)
+│   ├── auth-custom/        # auth provider: your own backend
+│   ├── auth-better-auth/   # auth provider: Better Auth
 │   ├── auth-ui/            # SignInForm, SignUpForm, ProtectedRoute, ...
 │   └── form-builder/       # Zod schema → form renderer
 ├── turbo.json              # Turborepo pipeline
@@ -62,7 +64,9 @@ The **component source, theme, `cn()`, and conventions are identical in both** �
 │   ├── lib/
 │   │   ├── utils.ts        #   cn()
 │   │   ├── api-client/     #   HTTP transport core
-│   │   ├── auth-custom/    #   auth provider for your own backend
+│   │   ├── auth-core/      #   the auth contract (types only)
+│   │   ├── auth-custom/    #   auth provider: your own backend
+│   │   ├── auth-better-auth/ # auth provider: Better Auth
 │   │   ├── auth-ui/        #   SignInForm, SignUpForm, ProtectedRoute, ...
 │   │   └── form-builder/   #   Zod schema → form renderer
 │   └── hooks/
@@ -191,11 +195,26 @@ const contactSchema = z.object({
 
 Auth is a **contract with swappable providers**, not one hardcoded integration. The scaffolded provider is the **custom-backend** one: for a project that already has its own auth API.
 
-Three pieces — monorepo `@<scope>/…`, standalone `@/lib/…`:
+The pieces — monorepo `@<scope>/…`, standalone `@/lib/…`:
 
-- **`api-client`** — the HTTP transport (`createHttpClient`, `HttpError`). Platform-neutral; no browser-only or Node-only APIs.
-- **`auth-custom`** — the provider. `createCustomBackendAuthProvider` (token storage + single-flight refresh) and `createAuthContract` (the `useSession`/`signIn`/`signUp`/`signOut`/`requestPasswordReset` surface).
-- **`auth-ui`** — `SignInForm`, `SignUpForm`, `ForgotPasswordForm`, `SessionStatus`, `ProtectedRoute`. Built on `SchemaForm`; driven only by the contract, so they're identical regardless of provider.
+- **`auth-core`** — the contract (`AuthContract`, `AuthSession`, `AuthResult`). Types only, no runtime code. Everything else points here.
+- **`api-client`** — the HTTP transport (`createHttpClient`, `HttpError`). Platform-neutral; no browser-only or Node-only APIs. Usable on its own for any API, not just auth.
+- **`auth-custom`** — provider for **your own backend**. `createCustomBackendAuthProvider` (token storage + single-flight refresh) and `createAuthContract`.
+- **`auth-better-auth`** — provider backed by **[Better Auth](https://better-auth.com)**, when you'd rather not run an auth server. Also exports `getServerSession`/`hasServerSession` for server components and route handlers.
+- **`auth-ui`** — `SignInForm`, `SignUpForm`, `ForgotPasswordForm`, `SessionStatus`, `ProtectedRoute`. Built on `SchemaForm`; driven **only by the contract**, so the same components render against either provider.
+
+### Choosing a provider
+
+Use **exactly one**. They are alternatives, not layers:
+
+| You have… | Use |
+| --- | --- |
+| An existing auth API (Rust, Express, Go, anything) | `auth-custom` — give it the URLs and Zod schemas |
+| No auth server, and you want one fast | `auth-better-auth` — runs in-process with Next.js |
+
+**Your auth provider and where your business logic lives are independent choices.** Remote auth with local Drizzle logic is as valid as Better Auth alongside a separate service. Nothing in these packages assumes either.
+
+Provider-specific flows — 2FA, passkeys, magic links, SSO, organizations — are deliberately **not** in the contract, since a hand-rolled backend usually can't implement them. Reach for the provider's own API (or [better-auth-ui](https://better-auth-ui.com) for Better Auth) when you need those.
 
 **Wiring it to your backend** — the scaffold ships a working example at `src/lib/auth.ts` (monorepo: `apps/app/src/lib/auth.ts`) pointed at mock in-memory API routes. **There are no assumed defaults**: every endpoint path and every request/response shape is a Zod schema you supply. To use your real backend, change the paths and schemas in that one file; nothing else is project-specific.
 
