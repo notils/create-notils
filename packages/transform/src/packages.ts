@@ -87,6 +87,15 @@ export const INTERNAL_PACKAGES: readonly InternalPackage[] = [
     addable: true,
   },
   {
+    name: "auth-better-auth",
+    description: "Auth provider backed by Better Auth, plus its server-side session helpers",
+    fold: { kind: "lib" },
+    // Depends on the contract only — same as auth-custom. Providers are
+    // alternatives to each other, never dependencies of each other.
+    dependsOn: ["auth-core"],
+    addable: true,
+  },
+  {
     name: "form-builder",
     description: "Recursive Zod-schema-to-form renderer",
     fold: { kind: "lib" },
