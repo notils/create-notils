@@ -305,6 +305,37 @@ before touching `packages/create-notils/src/*`:
   bugs above only appeared in one cell each. `--packages none` and
   `--auth better-auth --demo` are the two cells that broke most.
 
+- **Any in-memory state the template keeps MUST be pinned to `globalThis`.**
+  Next bundles each route handler and each page render separately, so a
+  module-level `const` in `src/lib/` is instantiated **more than once per
+  server** — each copy with its own empty state. This bit BOTH auth stand-ins,
+  and in both cases the symptom pointed somewhere else entirely:
+  - `mock-auth-store.ts` (pre-existing, custom backend): register and login
+    returned 200 with a real token, then `GET /api/auth/session` with that exact
+    token returned 401 — the session had been written into a different instance
+    of the `Map`.
+  - `auth-better-auth-server.ts` (Better Auth's memory adapter): after a
+    successful sign-up through the route handler, a server component importing
+    the same module saw `user: []`, so `getServerSession` returned null and the
+    server-gated page redirected an authenticated user back to `/login`.
+
+  The fix is the same shape as the Next docs' Prisma-client pattern: stash the
+  object on `globalThis` behind a `__notils*` key and read it back. It also
+  survives dev-server hot reloads, which would otherwise sign you out on every
+  file save. A real database adapter needs none of this — the state lives outside
+  the process — so this is purely a property of the in-memory stand-ins.
+
+- **`nextCookies()` is required in Better Auth's `plugins`, and must be last.**
+  Without it, sign-up/sign-in return 200 with a valid token but no `Set-Cookie`
+  ever reaches the client, so every later request is anonymous. Better Auth writes
+  the cookie through Next's own `cookies()` API and this plugin is the bridge.
+
+- **When testing auth flows by hand on Windows, don't round-trip tokens through
+  `/tmp` files.** Git Bash's `/tmp` and Node's `/tmp` are different paths, so
+  `curl -o /tmp/x.json` followed by `node -e "require('/tmp/x.json')"` fails to
+  resolve and yields an EMPTY token — which then looks exactly like a 401 auth
+  bug. Chased that once. Pipe the response into node via stdin instead.
+
 - **Standalone fold is generalized over library packages** (`flatten.ts`).
   `LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"]`
   drives it: each one's `src/*` moves to `src/lib/<name>/*` and every

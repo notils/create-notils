@@ -77,6 +77,22 @@ select.
 other is never generated — no competing implementations to decide between later,
 and no dependencies for the one you didn't choose.
 
+Both providers satisfy the same contract, so the sign-in, sign-up,
+forgot-password, and protected-route components are identical either way —
+**swapping providers is swapping one file**, `src/lib/auth.ts`. With `--demo` you
+get a working reference app for whichever you chose, running on an in-memory store
+so there is no database to provision first:
+
+| | **Custom authentication** | **Better Auth** |
+|---|---|---|
+| Demo backend | Mock routes under `app/api/auth/*` + an in-memory store | Better Auth's own routes, via one catch-all |
+| You configure | Every endpoint path and response schema, for your real API | Almost nothing — it owns both ends of the wire |
+| Server-side sessions | Not generally available | `/server-session`, gated before render |
+| Going to production | Point the paths at your API | Swap the memory adapter for a real database |
+
+Both demos reset on server restart — they keep state in memory, which is the point
+of a stand-in. Neither is production wiring, and both say so in their own files.
+
 Unselected packages are removed along with every reference to them: workspace
 dependencies, app imports, and the pages that used them. What remains builds
 cleanly. If something you selected requires something you didn't (the auth forms

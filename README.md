@@ -64,7 +64,13 @@ A modern TypeScript stack built around:
 - **[TypeScript](https://www.typescriptlang.org/)** — everywhere, `strict`
 - **[Biome](https://biomejs.dev/)** — one fast tool for linting + formatting (replaces ESLint + Prettier)
 
-Planned (see [Roadmap](#roadmap)): **Better Auth** + Better Auth UI (auth on by default), **PostgreSQL** + **Drizzle ORM**, **Docker**, and CI/CD.
+**Auth ships with two interchangeable providers**, chosen at scaffold time
+(`--auth custom` / `--auth better-auth`): your own backend, or
+**[Better Auth](https://better-auth.com/)** running in-process. Both satisfy one
+contract, so the same sign-in/sign-up/session components serve either — and the
+demo for each runs immediately after scaffolding, with no database to provision.
+
+Planned (see [Roadmap](#roadmap)): **PostgreSQL** + **Drizzle ORM**, **Docker**, and CI/CD.
 
 ---
 
