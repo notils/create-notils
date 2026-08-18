@@ -25,6 +25,7 @@ import { replaceInDirectoryTree } from "./filesystem.js";
 import { flattenToStandalone } from "./flatten.js";
 import { initializeGitRepository } from "./git.js";
 import { resetRootMetadata } from "./metadata.js";
+import { rewritePackageReadmes } from "./package-readmes.js";
 import {
   applyAppContentPlan,
   removePrunedDependencies,
@@ -167,6 +168,11 @@ async function configureProject(
         rewriteStylesheet: true,
       });
     }
+
+    // Fix up each surviving package's README: its `../../docs/` links point at a
+    // directory that never ships (see PATHS_TO_STRIP), so every scaffold used to
+    // carry dead links. Same rewriter `@notils/cli add` uses, so both paths agree.
+    await rewritePackageReadmes(projectRoot, { scope: `@${config.projectName}` });
 
     // The internal workspace packages (packages/ui, packages/config) keep the
     // `@notils/*` scope otherwise — rename it to the project's own scope, across

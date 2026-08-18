@@ -13,7 +13,8 @@
     "./filesystem": "./src/filesystem.ts",
     "./selection": "./src/selection.ts",
     "./environments": "./src/environments.ts",
-    "./app-content": "./src/app-content.ts"
+    "./app-content": "./src/app-content.ts",
+    "./readme": "./src/readme.ts"
   },
   "scripts": {
     "check:detection": "bun run scripts/check-detection.ts",

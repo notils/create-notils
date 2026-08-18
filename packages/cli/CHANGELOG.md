@@ -4,6 +4,26 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.2
+
+### Fixed
+
+- **`add` now writes each package's `README.md`.** It was dropped outright, on the
+  reasoning that it "documents the package inside our monorepo" — but these READMEs
+  are mostly real API documentation, and `create-notils` was already shipping them.
+  So an added package came out without the docs its scaffolded twin had, for no
+  stated reason.
+
+  The README is rewritten rather than copied, by a rewriter now shared with
+  `create-notils` so the two paths can't disagree again: links into `../../docs/`
+  become URLs to the published docs (that directory never ships, so those links
+  were dead), the `@notils/*` scope becomes the project's own, and a short note is
+  prepended saying the code is yours and where it came from.
+
+  Standalone targets get it at `src/lib/<name>/README.md`. The `ui` kit is the one
+  exception — it spreads across `src/components/` and `src/lib/` rather than
+  occupying one directory, so there is no single place its README belongs.
+
 ## 0.6.1
 
 Fixes for `add` in a **monorepo**, all reported from a real project on 0.6.0.

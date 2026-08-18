@@ -4,6 +4,19 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.1
+
+### Fixed
+
+- **Package READMEs no longer ship with dead documentation links.** Every
+  `packages/*/README.md` linked into `../../docs/`, but that directory is stripped
+  from every scaffold — so those links 404'd in every project generated so far.
+  They now point at the published docs on GitHub.
+
+  Each README also gains a short note saying the package is your code, where it
+  lives, and where it came from. The rewriter is shared with `@notils/cli`, so a
+  package that arrives via the scaffold and one added later look the same.
+
 ## 0.6.0
 
 ### Added

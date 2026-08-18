@@ -4,6 +4,7 @@ import { dirname, join, relative } from "node:path";
 import { pathExists } from "@notils/transform/filesystem";
 import type { InternalPackage } from "@notils/transform/packages";
 import type { NotilsConfig } from "@notils/transform/project-config";
+import { rewriteReadme } from "@notils/transform/readme";
 import { rewriteScopeInSource, rewriteSpecifiersInSource } from "@notils/transform/specifiers";
 
 import { targetDirectory } from "./installed.js";
@@ -17,10 +18,14 @@ import { targetDirectory } from "./installed.js";
  */
 
 /**
- * Root files we never copy verbatim. `package.json` and `tsconfig.json` ARE
- * needed in a monorepo target, but must be regenerated rather than copied — see
- * `manifestFilesFor`. README documents the package inside our monorepo, not the
- * user's copy of it.
+ * Root files we never copy VERBATIM — each is regenerated instead:
+ * `package.json` and `tsconfig.json` by `manifestFilesFor`, and `README.md` by
+ * `readmeFileFor` (which rewrites its links and scope for the target project).
+ *
+ * README used to be dropped outright, on the reasoning that it "documents the
+ * package inside our monorepo". Only partly true: these READMEs are mostly real
+ * API documentation a user wants, and the scaffolder was already shipping them —
+ * so `add` silently produced a package without the docs its scaffolded twin had.
  */
 const SKIPPED_FILES = new Set(["tsconfig.json", "package.json", "README.md"]);
 const SKIPPED_DIRECTORIES = new Set(["node_modules", ".turbo", "dist", ".git"]);
@@ -78,8 +83,9 @@ async function listFiles(directory: string, prefix = ""): Promise<string[]> {
  *
  * A package's `src/` contents land at the target directory root — `src/http.ts`
  * in the fetched `api-client` becomes `<lib>/api-client/http.ts`, matching what
- * the flatten transform produces at scaffold time. Non-`src` files (README) are
- * dropped: they document the package in the monorepo, not the user's copy.
+ * the flatten transform produces at scaffold time. Non-`src` files return null
+ * here; the ones that belong in the target (`package.json`, `tsconfig.json`,
+ * `README.md`) are generated separately rather than copied.
  */
 function destinationFor(
   fetchedRelative: string,
@@ -278,6 +284,57 @@ async function manifestFilesFor(
   return files;
 }
 
+/**
+ * The package's README, rewritten for this project.
+ *
+ * Written for BOTH shapes, unlike the manifest: a folded standalone package is
+ * still code the user now owns, and `src/lib/auth-custom/README.md` is exactly
+ * where someone looks to find out what it does.
+ *
+ * Returns null when the fetched package has no README — not an error, just a
+ * package that never had one.
+ */
+async function readmeFileFor(
+  projectRoot: string,
+  fetchedRoot: string,
+  pkg: InternalPackage,
+  config: NotilsConfig
+): Promise<PlannedFile | null> {
+  let source: string;
+  try {
+    source = await readFile(join(fetchedRoot, "README.md"), "utf8");
+  } catch {
+    return null;
+  }
+
+  // Where the package landed, which is also where its README goes. `ui` spreads
+  // rather than occupying one directory, so in a standalone project its README
+  // would have no natural home — skip it there rather than inventing one.
+  const location = targetDirectory(pkg, config);
+  if (!location) {
+    return null;
+  }
+  if (config.shape === "standalone" && pkg.fold.kind === "spread") {
+    return null;
+  }
+
+  const contents = rewriteReadme(source, {
+    scope: config.scope,
+    shape: config.shape,
+    packageName: pkg.name,
+    location,
+  });
+
+  const relativePath = `${location}/README.md`;
+  const absolute = join(projectRoot, relativePath);
+  let status: PlannedFile["status"] = "new";
+  if (await pathExists(absolute)) {
+    const existing = await readFile(absolute, "utf8");
+    status = existing === contents ? "unchanged" : "modified";
+  }
+  return { relativePath, contents, status };
+}
+
 function sortKeys(record: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
 }
@@ -402,6 +459,11 @@ export async function planPackage(
   }
 
   files.push(...(await manifestFilesFor(projectRoot, fetchedRoot, pkg, config)));
+
+  const readme = await readmeFileFor(projectRoot, fetchedRoot, pkg, config);
+  if (readme) {
+    files.push(readme);
+  }
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   return {
