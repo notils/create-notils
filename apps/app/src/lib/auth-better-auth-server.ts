@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
+import { nextCookies } from "better-auth/next-js";
 
 /**
  * The Better Auth server instance — the counterpart to `lib/auth.ts`'s client
@@ -25,16 +26,40 @@ import { memoryAdapter } from "better-auth/adapters/memory";
  */
 
 /**
- * In-memory tables. Better Auth's memory adapter takes a plain
- * `Record<string, unknown[]>` and manages the rows itself; the keys are its core
- * schema, so they are named rather than left to be created implicitly.
+ * In-memory tables, pinned to `globalThis`.
+ *
+ * Better Auth's memory adapter takes a plain `Record<string, unknown[]>` and
+ * manages the rows itself; the keys are its core schema, so they are named rather
+ * than created implicitly.
+ *
+ * **The `globalThis` pin is load-bearing, not defensive boilerplate.** Next
+ * bundles route handlers and page renders separately, so a module-level `const`
+ * here is instantiated more than once per server — each copy with its own empty
+ * tables. Measured: after a sign-up through the route handler, a server component
+ * importing this same module saw `user: []`, so `getSession` returned null and the
+ * server-gated page redirected an authenticated user back to /login. Pinning the
+ * object to `globalThis` gives every module instance the same tables.
+ *
+ * This is the same reason the Next.js docs pin a Prisma/Drizzle client in
+ * development — and it also survives dev-server hot reloads, which would
+ * otherwise wipe your session on every file save.
+ *
+ * A real database adapter needs none of this: the state lives outside the process.
  */
-const db: Record<string, unknown[]> = {
-  user: [],
-  session: [],
-  account: [],
-  verification: [],
+const globalStore = globalThis as typeof globalThis & {
+  __notilsAuthDb?: Record<string, unknown[]>;
 };
+
+if (!globalStore.__notilsAuthDb) {
+  globalStore.__notilsAuthDb = {
+    user: [],
+    session: [],
+    account: [],
+    verification: [],
+  };
+}
+
+const db = globalStore.__notilsAuthDb;
 
 export const auth = betterAuth({
   database: memoryAdapter(db),
@@ -82,4 +107,19 @@ export const auth = betterAuth({
   // Where the app is served, so Better Auth can build absolute callback and
   // reset URLs. Same default as Next's dev server.
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+
+  /**
+   * `nextCookies` is REQUIRED, not optional polish.
+   *
+   * Better Auth sets the session cookie through Next's own `cookies()` API, and
+   * this plugin is what bridges to it. Verified by leaving it out first: sign-up
+   * and sign-in returned 200 with a valid token, but no `Set-Cookie` header
+   * reached the client — so every subsequent request was anonymous and the
+   * server-gated page redirected an authenticated user straight back to /login.
+   * A silent, entirely plausible-looking failure.
+   *
+   * **Keep it LAST in this array.** It reads the response cookies other plugins
+   * may have set, and Better Auth warns at runtime if anything follows it.
+   */
+  plugins: [nextCookies()],
 });

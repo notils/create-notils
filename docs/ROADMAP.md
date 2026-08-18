@@ -239,18 +239,39 @@ Remaining:
       Better Auth)`, with `--auth none|custom|better-auth` for CI. Shipped with
       issue #3. Selecting one generates ONLY that provider — the competing
       implementation is never written, along with its dependencies.
-- [ ] **A runnable example in the template.** `apps/app` wires `auth-custom`
-      against mock routes; there is no equivalent Better Auth wiring (route
-      handler via `toNextJsHandler`, a Drizzle adapter, `.env` keys).
-      **Consequence to know:** every demo auth page imports the contract from
-      `src/lib/auth.ts`, which is custom-backend wiring — so those pages are
-      declared in `@notils/transform/app-content` as requiring `auth-custom`, and
-      `--auth better-auth --demo` generates the packages but NO auth pages. That
-      is deliberate: the alternative (keeping pages whose import was pruned) ships
-      a project that doesn't typecheck, which is exactly what it did before this
-      was declared correctly. The provider is verified by types, not a booting app.
-- [ ] **Demo pages for Better Auth**, so `--auth better-auth --demo` produces a
-      working reference like the custom-backend one does. Needs the above first.
+- [x] **A runnable example in the template.** `apps/app` now carries Better Auth
+      wiring alongside the custom-backend one, and a scaffold keeps whichever the
+      `--auth` choice selected:
+      - `src/lib/auth-better-auth-server.ts` — the `betterAuth()` instance, on the
+        **memory adapter** so `dev` works with no database to provision (the
+        direct counterpart of `mock-auth-store.ts`).
+      - `src/app/api/auth/[...all]/route.ts` — `toNextJsHandler`, one catch-all
+        replacing the six hand-written custom-backend routes.
+      - `src/lib/auth-better-auth.ts` — the client contract, **renamed to
+        `src/lib/auth.ts`** by the scaffold (see `renameTo` in
+        `@notils/transform/app-content`). It exports the same `auth` /
+        `signInInputSchema` / `signUpInputSchema`, which is what lets one set of
+        demo pages serve either provider — the payoff of `auth-core`.
+      - `src/app/server-session/page.tsx` — a route gated on the SERVER via
+        `getServerSession`, demonstrating the capability a custom backend can't
+        generally offer.
+      - `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` documented in `.env.example`.
+
+      **Two non-obvious things this cost, both verified by running it, both worth
+      not re-learning:**
+      1. `nextCookies()` is REQUIRED in `plugins` (and must be last). Without it
+         sign-up returns 200 with a valid token but no `Set-Cookie` ever reaches
+         the client, so every later request is anonymous.
+      2. The memory store MUST be pinned to `globalThis`. Next bundles route
+         handlers and page renders separately, so a module-level `const` is
+         instantiated more than once — measured as `user: []` in a server
+         component right after a successful sign-up through the route handler,
+         which made the gated page redirect an authenticated user.
+- [x] **Demo pages for Better Auth** — the existing pages serve it unchanged, via
+      the rename above, plus the Better-Auth-only `/server-session` page.
+      Exercised end to end against a running server: sign-up, sign-in, wrong
+      password (clean 401), session, password reset (URL logged), sign-out, and
+      server-side gating both with and without a session.
 - [ ] **Golden build test** extended to cover a Better Auth scaffold.
 - [ ] Confirm hands-on whether `better-auth-ui`'s shadcn variant targets Radix
       (it appears to) and what that means in practice for a project mixing it with
