@@ -4,6 +4,63 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.0
+
+### Added
+
+- **`notils add app <name>`** — add another application to an existing monorepo,
+  instead of copying an existing app by hand and fixing up its name, port, and
+  wiring.
+
+  ```sh
+  notils add app admin           # apps/admin, on the next free dev port
+  notils add app console --demo  # with the example pages
+  notils add app preview --dry-run
+  ```
+
+  It generates from the same template the scaffolder uses, so an app added later is
+  indistinguishable from one created up front. Specifically it:
+
+  - reads where apps live from `notils.json`'s `paths.apps`, and the package scope
+    from `scope`, rather than assuming a structure;
+  - matches the capabilities the project **actually has** — a project without
+    `auth-ui` gets an app with no auth pages and no dependency on it, rather than
+    one importing a package that isn't there;
+  - takes the next free dev port, read from your existing apps' `dev` scripts, so
+    `turbo run dev` can run them all side by side;
+  - leaves existing apps untouched, and refuses a name that already exists.
+
+  Monorepo only: a standalone project has one app at its root by definition, and
+  the command says so rather than inventing an `apps/` directory.
+
+- **A published JSON Schema for `notils.json`**, served at
+  `https://notils.com/schema.json` and version-controlled at
+  `packages/cli/schema/notils.schema.json`. Editors validate the file as you type,
+  and `check:publishable` blocks a release if the shipped schema and the URL the
+  CLI writes ever disagree.
+
+- **`paths.apps`** in `notils.json`, so `add app` resolves its target from the
+  manifest. Optional: configs written before this field keep working and fall back
+  to the conventional `apps/`.
+
+### Changed
+
+- **`$schema` now points at `https://notils.com/schema.json`** (was `notils.dev`,
+  which never served the schema). Any command that writes `notils.json` migrates
+  an old URL automatically — values untouched, only the URL your editor fetches.
+
+- **`notils.json` is the project manifest the CLI reads**, rather than a record it
+  writes and mostly ignores. Detection still exists for brownfield projects; it is
+  now the fallback rather than the primary path.
+
+### Fixed
+
+- `add app` rewrites the package scope in `tsconfig.json` and `biome.json`, not
+  just in source imports. Those reference shared presets by package name
+  (`"extends": "@notils/config/..."`), which the specifier-aware source rewrite
+  correctly skips — so a generated app inherited no compiler options at all and
+  failed with "Cannot use JSX unless the '--jsx' flag is provided".
+
 ## 0.5.0
 
 ### Added

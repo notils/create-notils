@@ -4,6 +4,120 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.0
+
+### Added
+
+- **Choose what goes into your project.** The scaffold used to copy everything the
+  template supports; now it asks, and generates only what you selected.
+
+  ```text
+  ? Authentication
+  ❯ None
+    Custom authentication
+    Better Auth
+
+  ? Select the packages you want to include
+  ◉ UI
+  ◉ API Client
+  ◯ Form Builder
+  ```
+
+  Flags for CI: `--auth none|custom|better-auth`,
+  `--packages ui,api-client,form-builder` (or `none`).
+
+  **Authentication is one choice, never several.** `auth-custom` and
+  `auth-better-auth` answer the same question, so picking one means the other is
+  never written — no competing implementations to reconcile later, and none of the
+  dependencies for the one you didn't pick.
+
+  Unselected packages are removed *with* every reference to them: workspace
+  dependencies, app imports, and the pages that used them. When something you
+  selected requires something you didn't (the auth forms are built on the form
+  renderer), the CLI adds it and says why rather than silently ignoring you.
+
+- **Fresh app by default; demo app on request** (`--demo` / `--no-demo`). A new
+  project is a clean starting point — a minimal branded landing page and your
+  production configuration, nothing else. No example pages to delete, no orphaned
+  imports, no unused dependencies.
+
+  `--demo` gives you the full reference application instead: sign-in, sign-up,
+  forgot-password, a protected route, navigation with live session state, and a
+  schema-driven form.
+
+- **Environment configuration** (`--env single|dev-prod|dev-staging-prod`).
+  Defaults to a single `.env.local`, because not every project needs staging on
+  day one.
+
+  Resolution is centralized in one module — `packages/config/env.ts` in a
+  monorepo, `src/env.ts` standalone — so no application reimplements "which
+  environment am I in":
+
+  ```ts
+  import { environment, isProduction } from "@my-app/config/env";
+  ```
+
+  The multi-environment setups key on `APP_ENV`, not `NODE_ENV`: Next.js sets
+  `NODE_ENV=production` for *every* production build, including the one you deploy
+  to staging, so `NODE_ENV` alone cannot tell them apart.
+
+- **Better Auth is now a runnable demo, not just a typed provider.** Both
+  providers ship app-side wiring and a scaffold keeps whichever you chose. The
+  seam is one file: each provider's wiring exports the same `auth`,
+  `signInInputSchema`, and `signUpInputSchema`, so every page works unchanged
+  against either — swapping providers is swapping `src/lib/auth.ts`.
+
+  Better Auth gets its `betterAuth()` instance on the in-memory adapter (so `dev`
+  works with no database to provision), its routes via one `toNextJsHandler`
+  catch-all, `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` documented in `.env.example`,
+  and a `/server-session` page demonstrating session gating **on the server** —
+  the capability a custom backend generally can't offer.
+
+- **`@notils/cli` is installed into generated projects** as a devDependency, so
+  `bun run notils` / `pnpm exec notils` work without a global install and each
+  project carries one known-good binary. The range is `latest`, so a fresh install
+  resolves the current CLI — note that your lockfile then pins it, and moving
+  forward later is an explicit `<manager> update @notils/cli`.
+
+- **`paths.apps` in `notils.json`**, so `notils add app` resolves where
+  applications live from the manifest rather than assuming `apps/`.
+
+### Changed
+
+- **`$schema` in `notils.json` now points at `https://notils.com/schema.json`**
+  (was `notils.dev`, which never served the schema). Existing projects are migrated
+  automatically the next time any CLI command writes the file — values untouched,
+  only the URL your editor validates against.
+
+- **`@notils/cli` is a devDependency rather than only a `notils` script.** This
+  reverses the earlier decision: the commands that *change* a project need the CLI
+  and the template it writes from to agree, and a project with its own binary has
+  one version rather than whatever the registry serves that minute. The script
+  stays, now invoking the local binary.
+
+- The default landing page is a minimal, branded starting point that says where you
+  are and what to replace, instead of rendering the example contact form.
+
+- The app's document metadata is set to your project's name, rather than shipping
+  Next.js's "Create Next App" placeholder.
+
+### Fixed
+
+- **In-memory auth state is pinned to `globalThis`.** Next.js instantiates a
+  module-level `const` more than once per server (route handlers and page renders
+  are bundled separately), so the mock auth store had a separate copy per route:
+  `/api/auth/login` issued a token that `/api/auth/session` then rejected with 401.
+  The demo auth flow now works end to end, and survives dev-server hot reloads
+  instead of signing you out on every file save.
+
+- A `--packages none` standalone scaffold no longer produces a broken project. The
+  flatten step assumed `packages/ui` existed and threw partway through, leaving a
+  half-monorepo with no `src/` at all.
+
+- No dangling references when the UI kit is declined: the theme provider is
+  unwrapped from the layout, `globals.css` points at Tailwind directly, and the
+  landing page uses classes that need no theme layer.
+
 ## 0.5.0
 
 ### Added

@@ -1,4 +1,4 @@
 {
   "$comment": "The git tag both CLIs fetch template content from. This is the TEMPLATE version — deliberately independent of either CLI npm version, so a CLI with no changes never has to publish a no-op release. Bump this when the template changes, then tag the repo with the same value. Both CLIs import it and bundle it at build time (they are published without the repo, so it cannot be read from disk at runtime).",
-  "ref": "v0.5.0"
+  "ref": "v0.6.0"
 }
