@@ -17,10 +17,12 @@
       "version": "0.1.0",
       "dependencies": {
         "@notils/api-client": "workspace:*",
+        "@notils/auth-better-auth": "workspace:*",
         "@notils/auth-custom": "workspace:*",
         "@notils/auth-ui": "workspace:*",
         "@notils/form-builder": "workspace:*",
         "@notils/ui": "workspace:*",
+        "better-auth": "^1.6.26",
         "next": "16.2.10",
         "react": "19.2.7",
         "react-dom": "19.2.7",

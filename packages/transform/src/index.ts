@@ -2,6 +2,7 @@ export {
   APP_CONTENT,
   type AppContentEntry,
   type AppContentPlan,
+  type AppContentRename,
   PRUNABLE_APP_DIRECTORIES,
   planAppContent,
 } from "@notils/transform/app-content";

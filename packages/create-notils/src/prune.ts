@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 
 import { type AppContentPlan, PRUNABLE_APP_DIRECTORIES } from "@notils/transform/app-content";
@@ -134,6 +134,13 @@ export async function applyAppContentPlan(
   plan: AppContentPlan
 ): Promise<void> {
   await Promise.all(plan.removePaths.map((path) => removePath(join(appDirectory, path))));
+
+  // Renames come after the deletions: the selected provider's wiring moves into
+  // `src/lib/auth.ts` only once the other provider's file has been removed from
+  // that path. Sequential, not parallel — the ordering IS the correctness here.
+  for (const { from, to } of plan.renames) {
+    await rename(join(appDirectory, from), join(appDirectory, to));
+  }
 
   for (const relative of PRUNABLE_APP_DIRECTORIES) {
     await removeDirectoryIfEmpty(join(appDirectory, relative));

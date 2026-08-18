@@ -23,6 +23,17 @@ export type AppContentEntry = {
   /** Path relative to the app root. */
   path: string;
   /**
+   * Rename this file to `renameTo` when it survives.
+   *
+   * Exists for the provider seam. Both auth providers ship a wiring file in the
+   * template — `lib/auth.ts` (custom backend) and `lib/auth-better-auth.ts`
+   * (Better Auth) — and whichever one the project selected becomes `lib/auth.ts`,
+   * because that is what every page imports. Without this the pages would have to
+   * know which provider they were built against, which is exactly the coupling
+   * `@notils/auth-core` exists to remove.
+   */
+  renameTo?: string;
+  /**
    * Internal packages this file imports. The file is removed when any of them is
    * pruned — a file importing a package that no longer exists is the dangling
    * reference issue #3 calls out by name.
@@ -46,46 +57,79 @@ export type AppContentEntry = {
  * capture future files whose fate nobody actually considered.
  */
 export const APP_CONTENT: readonly AppContentEntry[] = [
-  // --- Auth pages. Demo content AND auth-dependent. ---
+  // --- Auth pages. Demo content, and they need the UI kit plus SOME provider. ---
   //
-  // Each requires `auth-custom` as well as `auth-ui`, because every one of them
-  // imports the contract from `src/lib/auth.ts`, which is itself written against
-  // the custom-backend provider. Listing only `auth-ui` was a real bug:
-  // `--auth better-auth --demo` kept these pages while removing `lib/auth.ts`,
-  // producing a project that failed to typecheck on `Cannot find module
-  // '@/lib/auth'`. Until the template ships Better Auth wiring (see
-  // docs/ROADMAP.md), these pages belong to the custom-backend provider alone.
+  // They require only `auth-ui`, not a specific provider, because each provider
+  // ships its own wiring file that becomes `src/lib/auth.ts` (see the two entries
+  // below) and exports the same `auth` / `signInInputSchema` /
+  // `signUpInputSchema`. That is what lets one set of pages serve either provider.
+  //
+  // `auth-ui` itself is only ever kept when a provider was selected — the auth
+  // choice adds them together (see `authPackageNames` in selection.ts) — so
+  // requiring `auth-ui` transitively requires "a provider exists".
   {
     path: "src/app/login/page.tsx",
-    requires: ["auth-ui", "auth-custom"],
+    requires: ["auth-ui"],
     demo: true,
     note: "example sign-in page",
   },
   {
     path: "src/app/signup/page.tsx",
-    requires: ["auth-ui", "auth-custom"],
+    requires: ["auth-ui"],
     demo: true,
     note: "example sign-up page",
   },
   {
     path: "src/app/forgot-password/page.tsx",
-    requires: ["auth-ui", "auth-custom"],
+    requires: ["auth-ui"],
     demo: true,
     note: "example password-reset page",
   },
   {
     path: "src/app/dashboard/page.tsx",
-    requires: ["auth-ui", "auth-custom"],
+    requires: ["auth-ui"],
     demo: true,
     note: "example protected page",
   },
 
-  // --- Auth wiring. Needed by the auth pages; not itself a demo of anything,
-  // but useless without a provider, so it goes when auth does. ---
+  // --- Auth wiring: one file per provider, and the selected one is renamed to
+  // `src/lib/auth.ts`. Exactly one survives, because the auth choice is
+  // mutually exclusive — so the rename can never collide. ---
   {
+    // Already at the destination path, so no rename. Pruned when the project
+    // chose Better Auth (or no auth), which is what frees the path for the file
+    // below.
     path: "src/lib/auth.ts",
     requires: ["auth-custom"],
     demo: false,
+  },
+  {
+    path: "src/lib/auth-better-auth.ts",
+    requires: ["auth-better-auth"],
+    demo: false,
+    renameTo: "src/lib/auth.ts",
+  },
+  {
+    path: "src/lib/auth-better-auth-server.ts",
+    requires: ["auth-better-auth"],
+    demo: false,
+  },
+  {
+    // Better Auth's own routes, mounted by one catch-all. Claims the same
+    // `/api/auth/*` path as the hand-written custom-backend routes below, which
+    // is safe precisely because the two providers are mutually exclusive.
+    path: "src/app/api/auth/[...all]/route.ts",
+    requires: ["auth-better-auth"],
+    demo: false,
+  },
+  {
+    // Better Auth only, and demo content: it exists to SHOW server-side session
+    // gating, which is the capability that distinguishes this provider. A custom
+    // backend generally can't do it, so there is no equivalent page there.
+    path: "src/app/server-session/page.tsx",
+    requires: ["auth-better-auth"],
+    demo: true,
+    note: "example server-gated page (Better Auth)",
   },
   {
     path: "src/lib/mock-auth-store.ts",
@@ -155,9 +199,24 @@ export const APP_CONTENT: readonly AppContentEntry[] = [
 ];
 
 /** What a scaffold decided about app content. */
+/** A file that survived and must be moved to its final path. */
+export type AppContentRename = {
+  from: string;
+  to: string;
+};
+
 export type AppContentPlan = {
   /** Paths (app-relative) to delete, in no particular order. */
   removePaths: readonly string[];
+  /**
+   * Files to rename after the deletions — the provider-wiring seam.
+   *
+   * Applied AFTER `removePaths` so a rename never has to overwrite a file that
+   * was about to be deleted anyway: choosing Better Auth prunes the custom
+   * backend's `lib/auth.ts` and only then moves `lib/auth-better-auth.ts` into
+   * its place.
+   */
+  renames: readonly AppContentRename[];
   /** Human-readable reasons, one per removed path, for the scaffold report. */
   reasons: readonly string[];
   /**
@@ -167,6 +226,11 @@ export type AppContentPlan = {
    * cosmetic leftover.
    */
   keepsNavBar: boolean;
+  /**
+   * Whether the app ends up with auth wiring at `src/lib/auth.ts` — from either
+   * provider. What the auth pages actually depend on.
+   */
+  keepsAuthWiring: boolean;
   /** Whether any auth page survived, i.e. whether the app has auth routes. */
   keepsAuthPages: boolean;
 };
@@ -188,6 +252,7 @@ export function planAppContent(options: {
 
   const removePaths: string[] = [];
   const reasons: string[] = [];
+  const renames: AppContentRename[] = [];
   const kept = new Set<string>();
 
   for (const entry of APP_CONTENT) {
@@ -203,12 +268,20 @@ export function planAppContent(options: {
       continue;
     }
     kept.add(entry.path);
+    if (entry.renameTo) {
+      renames.push({ from: entry.path, to: entry.renameTo });
+    }
   }
 
   return {
     removePaths,
     reasons,
+    renames,
     keepsNavBar: kept.has("src/components/nav-bar.tsx"),
+    // Either provider's wiring lands at `src/lib/auth.ts`, so ask about the
+    // destination rather than a specific source file.
+    keepsAuthWiring:
+      kept.has("src/lib/auth.ts") || renames.some((rename) => rename.to === "src/lib/auth.ts"),
     keepsAuthPages: kept.has("src/app/login/page.tsx"),
   };
 }
@@ -220,6 +293,7 @@ export function planAppContent(options: {
  * Ordered deepest-first so removing children before parents actually empties them.
  */
 export const PRUNABLE_APP_DIRECTORIES: readonly string[] = [
+  "src/app/api/auth/[...all]",
   "src/app/api/auth/login",
   "src/app/api/auth/logout",
   "src/app/api/auth/refresh",
@@ -232,6 +306,7 @@ export const PRUNABLE_APP_DIRECTORIES: readonly string[] = [
   "src/app/signup",
   "src/app/forgot-password",
   "src/app/dashboard",
+  "src/app/server-session",
   "src/components",
   "src/lib",
 ];

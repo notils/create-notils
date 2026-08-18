@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { confirm, isCancel, log, note, spinner } from "@clack/prompts";
 import pc from "picocolors";
@@ -408,6 +408,13 @@ async function applyContentPlan(
   for (const relativePath of plan.removePaths) {
     await removePath(join(appDirectory, relativePath));
   }
+
+  // After the deletions: the selected provider's wiring moves into
+  // `src/lib/auth.ts` once the other provider's file has left that path.
+  for (const { from, to } of plan.renames) {
+    await rename(join(appDirectory, from), join(appDirectory, to));
+  }
+
   for (const relativePath of PRUNABLE_APP_DIRECTORIES) {
     const directory = join(appDirectory, relativePath);
     try {

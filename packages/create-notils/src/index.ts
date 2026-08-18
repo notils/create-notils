@@ -237,6 +237,7 @@ async function configureProject(
     projectName: config.projectName,
     projectType: config.projectType,
     scope: config.projectType === "monorepo" ? `@${config.projectName}` : null,
+    hasBetterAuth: selection.keptNames.has("auth-better-auth"),
   });
 
   await writeGeneratedReadme(projectRoot, {
@@ -303,17 +304,17 @@ function reportSelection(config: ScaffoldConfig, configured: ConfigureResult): v
 
   note(lines.join("\n"), "Your project");
 
-  // The template's example auth pages are wired to the custom-backend provider
-  // (they import the contract from src/lib/auth.ts), so a Better Auth demo gets
-  // the packages but no pages. Saying so beats letting someone hunt for a
-  // /login route that was never going to be there. See docs/ROADMAP.md.
+  // Better Auth's demo runs on an in-memory store so `dev` works with no database
+  // to provision. That is the right default for a template and the wrong one for
+  // production, so say it once here rather than relying on the file's own comment
+  // being read.
   if (config.includeDemo && config.selection.auth === "better-auth") {
-    log.warn(
-      "The example auth pages are wired to the custom-backend provider, so they weren't generated."
+    log.info(
+      "Better Auth is wired to an in-memory store, so sign-ups reset when the server restarts."
     );
     log.message(
       pc.dim(
-        "  Better Auth is installed and ready to wire up — see packages/auth-better-auth. Use --auth custom for the runnable example."
+        "  Swap `database` in src/lib/auth-better-auth-server.ts for a real adapter when you need persistence."
       )
     );
   }

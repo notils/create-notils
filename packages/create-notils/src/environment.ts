@@ -39,12 +39,14 @@ export async function configureEnvironments(
     projectType: "monorepo" | "standalone";
     /** Scope for the monorepo import hint, e.g. `@my-app`. */
     scope: string | null;
+    /** Whether Better Auth was selected — it contributes its own variables. */
+    hasBetterAuth: boolean;
   }
 ): Promise<EnvironmentWriteResult> {
-  const { setup, projectName, projectType, scope } = options;
+  const { setup, projectName, projectType, scope, hasBetterAuth } = options;
   const written: string[] = [];
 
-  for (const file of environmentFiles(setup, { projectName })) {
+  for (const file of environmentFiles(setup, { projectName, hasBetterAuth })) {
     await writeTextFile(join(projectRoot, file.path), file.contents);
     written.push(file.path);
   }

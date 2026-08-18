@@ -56,10 +56,22 @@ export type EnvironmentFile = {
  */
 export function environmentFiles(
   setup: EnvironmentSetup,
-  options: { projectName: string }
+  options: {
+    projectName: string;
+    /**
+     * Whether the project uses Better Auth. It needs two variables of its own, and
+     * `.env.example` is meant to list every variable the project reads — omitting
+     * them would leave a developer to discover `BETTER_AUTH_SECRET` from a runtime
+     * failure instead.
+     */
+    hasBetterAuth?: boolean;
+  }
 ): EnvironmentFile[] {
   const files: EnvironmentFile[] = [
-    { path: ".env.example", contents: exampleFileContents(setup, options.projectName) },
+    {
+      path: ".env.example",
+      contents: exampleFileContents(setup, options.projectName, options.hasBetterAuth === true),
+    },
   ];
 
   if (setup === "single") {
@@ -89,7 +101,30 @@ NEXT_PUBLIC_APP_NAME="${options.projectName}"
   return files;
 }
 
-function exampleFileContents(setup: EnvironmentSetup, projectName: string): string {
+/**
+ * Better Auth's own variables, for `.env.example`.
+ *
+ * The template runs without them (the server falls back to a development-only
+ * secret so `bun run dev` works immediately after scaffolding), which is exactly
+ * why they must be DOCUMENTED here — a variable that only matters in production
+ * is the one most easily forgotten.
+ */
+function betterAuthVariables(): string {
+  return `
+# Better Auth. The template falls back to a development-only secret so \`dev\`
+# works out of the box — set a real one before deploying anywhere. Generate with:
+#   openssl rand -base64 32
+BETTER_AUTH_SECRET=""
+# The app's public origin, used to build callback and password-reset URLs.
+BETTER_AUTH_URL="http://localhost:3000"
+`;
+}
+
+function exampleFileContents(
+  setup: EnvironmentSetup,
+  projectName: string,
+  hasBetterAuth: boolean
+): string {
   const header = `# Every variable this project reads. Committed as documentation — no real
 # values here. Copy to ${setup === "single" ? ".env.local" : ".env.<environment>.local"} and fill them in.
 `;
@@ -106,7 +141,7 @@ APP_ENV="development"
 
   return `${header}${appEnv}
 NEXT_PUBLIC_APP_NAME="${projectName}"
-`;
+${hasBetterAuth ? betterAuthVariables() : ""}`;
 }
 
 /**
