@@ -64,7 +64,13 @@ A modern TypeScript stack built around:
 - **[TypeScript](https://www.typescriptlang.org/)** — everywhere, `strict`
 - **[Biome](https://biomejs.dev/)** — one fast tool for linting + formatting (replaces ESLint + Prettier)
 
-Planned (see [Roadmap](#roadmap)): **Better Auth** + Better Auth UI (auth on by default), **PostgreSQL** + **Drizzle ORM**, **Docker**, and CI/CD.
+**Auth ships with two interchangeable providers**, chosen at scaffold time
+(`--auth custom` / `--auth better-auth`): your own backend, or
+**[Better Auth](https://better-auth.com/)** running in-process. Both satisfy one
+contract, so the same sign-in/sign-up/session components serve either — and the
+demo for each runs immediately after scaffolding, with no database to provision.
+
+Planned (see [Roadmap](#roadmap)): **PostgreSQL** + **Drizzle ORM**, **Docker**, and CI/CD.
 
 ---
 
@@ -73,14 +79,28 @@ Planned (see [Roadmap](#roadmap)): **Better Auth** + Better Auth UI (auth on by 
 ```
 create-notils/
 ├── apps/
-│   └── app/              # Next.js 16 application (App Router)
+│   └── app/              # Next.js 16 application (App Router) — the app template
 ├── packages/
 │   ├── config/           # Shared tsconfig + Biome config (@notils/config)
-│   └── ui/               # Shared shadcn/ui component library (@notils/ui)
+│   ├── ui/               # Shared shadcn/ui component library (@notils/ui)
+│   ├── api-client/       # HTTP transport core
+│   ├── auth-core/        # The provider-agnostic auth contract (types only)
+│   ├── auth-custom/      # Auth provider: your own backend
+│   ├── auth-better-auth/ # Auth provider: Better Auth
+│   ├── auth-ui/          # Sign-in/sign-up/session components
+│   ├── form-builder/     # Zod schema → form renderer
+│   ├── create-notils/    # The scaffolding CLI
+│   ├── cli/              # @notils/cli — add capabilities and apps after scaffolding
+│   └── transform/        # Shared selection/rewrite logic used by both CLIs
 ├── biome.json            # Root Biome config (extends @notils/config)
 ├── turbo.json            # Turborepo pipeline
+├── template-version.json # The git tag both CLIs fetch template source from
 └── package.json          # Workspaces + root scripts
 ```
+
+This repository **is** the template. A scaffold fetches it at a pinned tag, then
+keeps only what was selected — so the template can carry every capability while a
+generated project carries only the ones its developer asked for.
 
 ### `@notils/ui` — the shared design system
 
@@ -121,6 +141,22 @@ npx create-notils my-app
 cd my-app
 bun install
 bun run dev
+```
+
+The CLI asks what you want — project shape, a fresh or demo app, which auth
+strategy, which packages, how many environments — and generates only that. Every
+prompt has a flag, so CI can skip them:
+
+```bash
+npx create-notils my-app --auth better-auth --packages ui,api-client --env single -y
+```
+
+Later, grow the project with [`@notils/cli`](packages/cli) (installed into every
+scaffold):
+
+```bash
+bun run notils add auth-ui       # add a capability you skipped
+bun run notils add app admin     # add another app to a monorepo
 ```
 
 ### Use these conventions in a project you already have

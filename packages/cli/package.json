@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "schema",
     "CHANGELOG.md"
   ],
   "engines": {

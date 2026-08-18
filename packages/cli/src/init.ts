@@ -4,9 +4,11 @@ import pc from "picocolors";
 import {
   configPath,
   detectProjectConfig,
+  isLegacySchemaUrl,
   type NotilsConfig,
   type ProjectShape,
   readProjectConfig,
+  SCHEMA_URL,
   writeProjectConfig,
 } from "@notils/transform/project-config";
 
@@ -38,6 +40,13 @@ export async function runInit(projectRoot: string, options: InitOptions): Promis
       await confirm({ message: "Re-detect and overwrite it?", initialValue: false })
     );
     if (!overwrite) {
+      // Declining re-detection must not leave a project stuck on a `$schema` URL
+      // that never resolved (see `isLegacySchemaUrl`). The values are the user's
+      // and stay untouched; only the URL the editor validates against moves.
+      if (isLegacySchemaUrl(existing.$schema)) {
+        await writeProjectConfig(projectRoot, existing);
+        log.success(`Updated the ${pc.cyan("$schema")} URL to ${pc.cyan(SCHEMA_URL)}.`);
+      }
       return existing;
     }
   }
@@ -145,6 +154,13 @@ export async function loadOrInitConfig(
 ): Promise<NotilsConfig> {
   const existing = await readProjectConfig(projectRoot);
   if (existing) {
+    // Every command that touches the config is a chance to migrate a project off
+    // the old `notils.dev` URL, which never served the schema. Silent by design
+    // here (unlike `init`, whose whole job is reporting what it decided): `add`
+    // has its own output to show, and this changes nothing about the project.
+    if (isLegacySchemaUrl(existing.$schema)) {
+      await writeProjectConfig(projectRoot, existing);
+    }
     return existing;
   }
   log.info(

@@ -23,7 +23,8 @@ export default function DashboardPage() {
         </div>
         <p className="text-muted-foreground">
           This route is gated by ProtectedRoute — reaching it means the session is real, confirmed
-          against the /api/auth/session route via @notils/auth-custom.
+          against your auth provider through the shared AuthContract. Swapping providers is swapping{" "}
+          <code>src/lib/auth.ts</code>; this page never changes.
         </p>
       </div>
     </ProtectedRoute>

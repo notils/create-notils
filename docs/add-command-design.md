@@ -86,7 +86,7 @@ brownfield project. Records only what `add` cannot reliably infer:
 
 ```json
 {
-  "$schema": "https://notils.dev/schema.json",
+  "$schema": "https://notils.com/schema.json",
   "shape": "monorepo",
   "scope": "@my-app",
   "paths": {

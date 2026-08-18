@@ -269,6 +269,73 @@ before touching `packages/create-notils/src/*`:
   it: `flatten.ts` already strips the `@notils/ui` scope entirely, and that
   rewrite depends on the literal string, so the scope-rename step must stay
   monorepo-only (running it first would break flatten's hardcoded match).
+- **Selection and pruning** (issues #2 and #3). The template carries every
+  capability; a generated project carries only what was selected. Three modules
+  in `@notils/transform` own the decisions, and `create-notils` owns the
+  filesystem work:
+
+  | module | decides |
+  | --- | --- |
+  | `selection.ts` | which packages survive (auth is ONE value, never a set) |
+  | `app-content.ts` | which app FILES survive — the fresh/demo split *and* the capability prune, because they are the same mechanism |
+  | `environments.ts` | which `.env*` files exist and what the resolution module says |
+  | `prune.ts` (create-notils) | removes package dirs + workspace deps |
+  | `app-source.ts` (create-notils) | rewrites the files that IMPORTED what was pruned |
+
+  **Ordering is load-bearing, and getting it wrong fails silently:**
+  - the dependency prune matches the literal `@notils/<name>` specifier, so it
+    MUST run before the monorepo scope rename;
+  - standalone must prune BEFORE `flattenToStandalone`, which folds every package
+    directory it finds and would otherwise carry a pruned one into the output.
+
+  **Deleting a file is never enough — always fix its importers.** Every bug found
+  while building this was of that shape: the nav bar removed while `layout.tsx`
+  still imported it; `globals.css` importing `@notils/ui/globals.css` after `ui`
+  was pruned; `tsconfig.json` extending `@notils/config` in an app added by
+  `add app`; a `cn()` helper written without the `clsx`/`tailwind-merge` that went
+  with the pruned package. Each produced a project that scaffolded "successfully"
+  and then failed to build. **`APP_CONTENT`'s `requires` must list every package a
+  file's imports transitively need**, not just the obvious one: the demo auth
+  pages import `@/lib/auth` (custom-backend wiring), so they require
+  `auth-custom` as well as `auth-ui` — declaring only `auth-ui` made
+  `--auth better-auth --demo` generate pages whose import had been pruned.
+
+  **Verify by building the matrix, not by reading the code.** shape × auth ×
+  demo is 12 combinations and they do not fail in the same places; two of the
+  bugs above only appeared in one cell each. `--packages none` and
+  `--auth better-auth --demo` are the two cells that broke most.
+
+- **Any in-memory state the template keeps MUST be pinned to `globalThis`.**
+  Next bundles each route handler and each page render separately, so a
+  module-level `const` in `src/lib/` is instantiated **more than once per
+  server** — each copy with its own empty state. This bit BOTH auth stand-ins,
+  and in both cases the symptom pointed somewhere else entirely:
+  - `mock-auth-store.ts` (pre-existing, custom backend): register and login
+    returned 200 with a real token, then `GET /api/auth/session` with that exact
+    token returned 401 — the session had been written into a different instance
+    of the `Map`.
+  - `auth-better-auth-server.ts` (Better Auth's memory adapter): after a
+    successful sign-up through the route handler, a server component importing
+    the same module saw `user: []`, so `getServerSession` returned null and the
+    server-gated page redirected an authenticated user back to `/login`.
+
+  The fix is the same shape as the Next docs' Prisma-client pattern: stash the
+  object on `globalThis` behind a `__notils*` key and read it back. It also
+  survives dev-server hot reloads, which would otherwise sign you out on every
+  file save. A real database adapter needs none of this — the state lives outside
+  the process — so this is purely a property of the in-memory stand-ins.
+
+- **`nextCookies()` is required in Better Auth's `plugins`, and must be last.**
+  Without it, sign-up/sign-in return 200 with a valid token but no `Set-Cookie`
+  ever reaches the client, so every later request is anonymous. Better Auth writes
+  the cookie through Next's own `cookies()` API and this plugin is the bridge.
+
+- **When testing auth flows by hand on Windows, don't round-trip tokens through
+  `/tmp` files.** Git Bash's `/tmp` and Node's `/tmp` are different paths, so
+  `curl -o /tmp/x.json` followed by `node -e "require('/tmp/x.json')"` fails to
+  resolve and yields an EMPTY token — which then looks exactly like a 401 auth
+  bug. Chased that once. Pipe the response into node via stdin instead.
+
 - **Standalone fold is generalized over library packages** (`flatten.ts`).
   `LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"]`
   drives it: each one's `src/*` moves to `src/lib/<name>/*` and every
@@ -495,14 +562,24 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   projects have all five packages on disk with no record, and reporting those as
   missing would be plainly wrong.
 
-- **Scaffolds get a `notils` SCRIPT, never a dependency** (`addNotilsScript` in
-  `scaffold.ts`): `"notils": "bunx @notils/cli"`, with the runner matched to the
-  chosen package manager (`npx` for npm **and yarn** — `yarn dlx` is Berry-only
-  and a bare `yarn` is still Classic on most machines; `pnpm dlx` for pnpm).
-  Do NOT "improve" this into a devDependency: it would pin a version that goes
-  stale, defeating the whole point that a fix reaches every project including
-  ones scaffolded long ago, and add transitive deps for a tool run a handful of
-  times. The script exists purely so someone reading `package.json` finds it.
+- **Scaffolds get `@notils/cli` as a devDependency at `latest`, plus a `notils`
+  script** (`addNotilsCli` in `scaffold.ts`). This REVERSED an earlier decision
+  (script-only, via `bunx`) — see issue #4. The reason for the reversal: the
+  commands that change a project (`add`, `add app`, later `update` / `doctor`)
+  need the CLI and the template it writes from to agree, and a project that
+  carries its own binary has one known-good version rather than whatever the
+  registry serves that minute. `pnpm exec notils` then works offline too.
+
+  The range is `latest`, deliberately not `^<version>`: a caret pin on an 0.x
+  version doesn't even permit minor upgrades, and CLI fixes should reach every
+  project. Know the tradeoff — the lockfile freezes whatever `latest` resolved to
+  at install time, so moving forward is an explicit `<manager> update
+  @notils/cli`. That is called out in the generated README, not left implicit.
+
+  `PACKAGE_RUNNER` still exists in `scaffold.ts` for the README's `skills add`
+  examples (`npx` for npm **and yarn** — `yarn dlx` is Berry-only and a bare
+  `yarn` is still Classic on most machines; `pnpm dlx` for pnpm). Don't delete it
+  with the script change.
 
 `add`, `init`, and `list` are all feature-complete against
 [docs/ROADMAP.md](../../../docs/ROADMAP.md). **`@notils/cli` has never been

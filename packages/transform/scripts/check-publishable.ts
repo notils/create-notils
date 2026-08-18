@@ -129,6 +129,49 @@ console.log("\n=== template ref ===");
   }
 }
 
+// ---------------------------------------------------------------------------
+// The `notils.json` schema. `SCHEMA_URL` is stamped into every config the CLIs
+// write, and editors fetch it to validate the file — so a schema that doesn't
+// ship, or whose `$id` disagrees with the URL being written, gives every user a
+// silently broken `$schema` reference. Neither failure surfaces at runtime.
+// ---------------------------------------------------------------------------
+console.log("\n=== notils.json schema ===");
+{
+  const schemaPath = join(repoRoot, "packages", "cli", "schema", "notils.schema.json");
+  let schema: { $id?: string } | null = null;
+  try {
+    schema = JSON.parse(await readFile(schemaPath, "utf8")) as { $id?: string };
+    ok("schema file parses as JSON");
+  } catch {
+    fail(`${schemaPath} is missing or not valid JSON`);
+  }
+
+  // The single source of truth for the URL, read from the module that writes it
+  // rather than duplicated here — a copy would drift.
+  const { SCHEMA_URL } = await import("../src/project-config.js");
+
+  if (schema) {
+    if (schema.$id === SCHEMA_URL) {
+      ok(`schema $id matches SCHEMA_URL (${SCHEMA_URL})`);
+    } else {
+      fail(
+        `schema $id "${schema.$id}" does not match SCHEMA_URL "${SCHEMA_URL}" — the published schema and the URL written into notils.json must agree`
+      );
+    }
+  }
+
+  // The CLI package must actually ship it, or the file can't be served from the
+  // published package.
+  const cliManifest = JSON.parse(
+    await readFile(join(repoRoot, "packages", "cli", "package.json"), "utf8")
+  ) as { files?: string[] };
+  if (cliManifest.files?.includes("schema")) {
+    ok("@notils/cli `files` includes schema");
+  } else {
+    fail("@notils/cli `files` does not include schema — the published package would omit it");
+  }
+}
+
 console.log(
   failures === 0
     ? "\nall publishable checks passed"

@@ -24,9 +24,39 @@ export type MockUser = {
 
 type StoredUser = MockUser & { password: string };
 
-const usersByEmail = new Map<string, StoredUser>();
-const sessionsByAccessToken = new Map<string, { userId: string; refreshToken: string }>();
-const refreshTokens = new Map<string, string>(); // refreshToken -> accessToken
+/**
+ * The store is pinned to `globalThis`, and that is load-bearing.
+ *
+ * Next bundles each route handler separately, so module-level `Map`s here are
+ * instantiated more than once per server — `/api/auth/login` and
+ * `/api/auth/session` each got their own empty copies. Measured: register and
+ * login both returned 200 with a real token, then `GET /api/auth/session` with
+ * that exact token returned 401, because the session had been written into a
+ * different instance of the map. Pinning to `globalThis` gives every route the
+ * same store, and also survives dev-server hot reloads (which would otherwise
+ * sign you out on every file save).
+ *
+ * A real backend needs none of this — the state lives outside the process. This
+ * only matters because the stand-in keeps state in memory.
+ */
+type MockStore = {
+  usersByEmail: Map<string, StoredUser>;
+  sessionsByAccessToken: Map<string, { userId: string; refreshToken: string }>;
+  /** refreshToken -> accessToken */
+  refreshTokens: Map<string, string>;
+};
+
+const globalStore = globalThis as typeof globalThis & { __notilsMockAuth?: MockStore };
+
+if (!globalStore.__notilsMockAuth) {
+  globalStore.__notilsMockAuth = {
+    usersByEmail: new Map(),
+    sessionsByAccessToken: new Map(),
+    refreshTokens: new Map(),
+  };
+}
+
+const { usersByEmail, sessionsByAccessToken, refreshTokens } = globalStore.__notilsMockAuth;
 
 function issueSession(userId: string) {
   const accessToken = randomUUID();

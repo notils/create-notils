@@ -142,8 +142,44 @@ for.
 @notils/auth-better-auth exports:
   createBetterAuthContract()   ← satisfies AuthContract (Tier 1, works with auth-ui)
   getServerSession()           ← Better Auth only, outside the contract
-  createAuthHandler()          ← Better Auth only, outside the contract
+  hasServerSession()           ← Better Auth only, outside the contract
 ```
+
+The route handler is **not** one of our exports: Better Auth ships
+`toNextJsHandler` in `better-auth/next-js`, and the template uses that directly
+(one catch-all at `app/api/auth/[...all]/route.ts`). An earlier draft of this doc
+named a `createAuthHandler()` of our own — there is no reason to wrap a function
+that already does exactly the right thing.
+
+## How the template wires it (verified against a running server)
+
+Both providers ship app-side wiring, and a scaffold keeps whichever `--auth`
+selected. The seam is one file:
+
+| file | role |
+| --- | --- |
+| `src/lib/auth.ts` | the provider seam — **exports `auth`, `signInInputSchema`, `signUpInputSchema`** |
+| `src/lib/auth-better-auth-server.ts` | the `betterAuth()` instance (Better Auth only) |
+| `src/app/api/auth/[...all]/route.ts` | `toNextJsHandler(auth)` (Better Auth only) |
+| `src/app/api/auth/*/route.ts` | six hand-written mock routes (custom backend only) |
+
+Because both providers' wiring files export the same three names, **every demo
+page imports `@/lib/auth` and works unchanged against either.** That is the payoff
+of `auth-core`, and it is why the scaffold *renames* the selected provider's file
+to `lib/auth.ts` (see `renameTo` in `@notils/transform/app-content`) rather than
+making the pages provider-aware.
+
+Two things this cost, both found by running it rather than reading it:
+
+1. **`nextCookies()` is required** in Better Auth's `plugins`, and must be last.
+   Without it, sign-up returns 200 with a valid token but no `Set-Cookie` reaches
+   the client, so every later request is anonymous.
+2. **In-memory stores must be pinned to `globalThis`.** Next instantiates a
+   module-level `const` more than once per server (route handlers and page renders
+   are bundled separately), so each copy had its own empty tables. This broke both
+   stand-ins: Better Auth's memory adapter *and* the pre-existing
+   `mock-auth-store.ts`, where a token issued by `/api/auth/login` was rejected by
+   `/api/auth/session`. Real database adapters are unaffected.
 
 Rejected: adding an optional `getServerSession?` to `AuthContract`. It would put a
 field on every provider that a hand-rolled Rust or Express backend cannot

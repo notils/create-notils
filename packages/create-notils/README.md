@@ -31,6 +31,105 @@ Pick the shape that fits — the CLI asks, or you pass `--type`:
 
 Both shapes come from a single source of truth: the standalone variant is derived from the monorepo by a deterministic flatten (folds `packages/*` into the app, rewrites imports to `@/*`, merges configs). There is no duplicated template.
 
+## Fresh app or demo app
+
+A starter shouldn't create work for you, so the default is a **fresh app**: a
+clean landing page and the project's production configuration, and nothing else.
+
+```text
+What would you like to create?
+
+❯ Fresh app (recommended)
+  Demo app
+```
+
+| | **Fresh** (default) | **Demo** (`--demo`) |
+|---|---|---|
+| Landing page | Minimal, branded, obviously yours to replace | The full example page |
+| Auth pages | — | Sign-in, sign-up, forgot-password, a protected route |
+| Navigation | — | Nav bar with live session state |
+| Example form | — | A schema-driven contact form |
+| Mock auth API | — | In-memory routes backing the example pages |
+
+Nothing is left behind in a fresh app — no orphaned imports, no unused
+dependencies, no example components you have to hunt down and delete. Reach for
+`--demo` when you want a complete working reference to read or experiment with.
+
+## Choose what goes in
+
+The template contains everything it supports. Your project gets only what you
+select.
+
+```text
+? Authentication
+❯ None
+  Custom authentication
+  Better Auth
+
+? Select the packages you want to include
+◉ UI
+◉ API Client
+◯ Form Builder
+```
+
+**Authentication is one choice, never several.** `auth-custom` and
+`auth-better-auth` are two answers to the same question, so picking one means the
+other is never generated — no competing implementations to decide between later,
+and no dependencies for the one you didn't choose.
+
+Both providers satisfy the same contract, so the sign-in, sign-up,
+forgot-password, and protected-route components are identical either way —
+**swapping providers is swapping one file**, `src/lib/auth.ts`. With `--demo` you
+get a working reference app for whichever you chose, running on an in-memory store
+so there is no database to provision first:
+
+| | **Custom authentication** | **Better Auth** |
+|---|---|---|
+| Demo backend | Mock routes under `app/api/auth/*` + an in-memory store | Better Auth's own routes, via one catch-all |
+| You configure | Every endpoint path and response schema, for your real API | Almost nothing — it owns both ends of the wire |
+| Server-side sessions | Not generally available | `/server-session`, gated before render |
+| Going to production | Point the paths at your API | Swap the memory adapter for a real database |
+
+Both demos reset on server restart — they keep state in memory, which is the point
+of a stand-in. Neither is production wiring, and both say so in their own files.
+
+Unselected packages are removed along with every reference to them: workspace
+dependencies, app imports, and the pages that used them. What remains builds
+cleanly. If something you selected requires something you didn't (the auth forms
+are built on the form renderer, for instance), the CLI adds it and tells you why.
+
+## Environments
+
+Not every project needs staging on day one.
+
+```text
+? Environment setup
+❯ Single environment (recommended)
+  Development + Production
+  Development + Staging + Production
+```
+
+| Setup | Files |
+|---|---|
+| `single` | `.env.local`, `.env.example` |
+| `dev-prod` | `.env.development`, `.env.production`, `.env.example` |
+| `dev-staging-prod` | adds `.env.staging` |
+
+Resolution is centralized in one module — `packages/config/env.ts` in a monorepo,
+`src/env.ts` standalone — so no application reimplements "which environment am I
+in":
+
+```ts
+import { environment, isProduction } from "@my-app/config/env";
+```
+
+For the multi-environment setups, `APP_ENV` selects the environment rather than
+`NODE_ENV`: Next.js sets `NODE_ENV=production` for *every* production build,
+including the one you deploy to staging, so `NODE_ENV` alone can't tell them
+apart. The committed `.env.<environment>` files hold non-secret defaults; real
+secrets belong in `.env.<environment>.local` (gitignored) or your host's secret
+store.
+
 ## Usage
 
 ```sh
@@ -45,6 +144,12 @@ npm create notils@latest my-app -- --type standalone --pm pnpm -y
 
 # Monorepo with two apps
 npm create notils@latest shop -- --type monorepo --apps admin,storefront -y
+
+# Fully specified: Better Auth, two packages, one environment
+npm create notils@latest my-app -- --auth better-auth --packages ui,api-client --env single -y
+
+# The complete reference application
+npm create notils@latest my-app -- --demo -y
 ```
 
 > When using `npm create`, pass flags after `--` (as shown). `npx create-notils` / `bunx create-notils` don't need the separator.
@@ -57,6 +162,10 @@ npm create notils@latest shop -- --type monorepo --apps admin,storefront -y
 | `-t, --type <type>` | `monorepo` \| `standalone` | prompted (monorepo) |
 | `--apps <names>` | Comma-separated app names (monorepo) | `web` |
 | `--pm <manager>` | `bun` \| `pnpm` \| `npm` \| `yarn` | `bun` |
+| `--demo` / `--no-demo` | Include the example pages and auth flows | prompted (no) |
+| `--auth <choice>` | `none` \| `custom` \| `better-auth` | prompted (`none`) |
+| `--packages <names>` | `ui,api-client,form-builder` (or `none`) | prompted (`ui,api-client`) |
+| `--env <setup>` | `single` \| `dev-prod` \| `dev-staging-prod` | prompted (`single`) |
 | `--install` / `--no-install` | Install dependencies after scaffolding | prompted (yes) |
 | `--git` / `--no-git` | Initialize a git repository | yes |
 | `-y, --yes` | Accept all defaults without prompting | — |
@@ -80,6 +189,22 @@ bun run ui:add button --overwrite   # update in place; review the git diff
 ```
 
 See the generated `AGENTS.md` and the `notils-project` skill in the project for conventions.
+
+## Growing the project
+
+Your project isn't stuck with the choices you made at scaffold time.
+[`@notils/cli`](../cli) is installed as a devDependency, so:
+
+```sh
+bun run notils list                 # what's available, what's installed
+bun run notils add auth-ui          # add a capability you skipped
+bun run notils add app admin        # add another app (monorepo)
+```
+
+`add app` generates the new app from the same template the scaffold used, with
+its own dev port and workspace wiring, matched to the capabilities this project
+actually has — so `apps/admin` is indistinguishable from an app you asked for up
+front, and your existing apps are untouched.
 
 ## AI agent context
 
