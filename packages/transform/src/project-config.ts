@@ -14,6 +14,32 @@ import { pathExists, readJsonFile, writeJsonFile } from "./filesystem.js";
 
 export const CONFIG_FILE_NAME = "notils.json";
 
+/**
+ * The canonical, public `$schema` URL for `notils.json`.
+ *
+ * Treated as a stable public API: editors fetch it to validate the file, so it
+ * must keep resolving even as the schema itself gains fields. The schema source
+ * lives at `packages/cli/schema/notils.schema.json` in this repository and is
+ * served from that URL — keep the two in step when adding a field.
+ */
+export const SCHEMA_URL = "https://notils.com/schema.json";
+
+/**
+ * `$schema` URLs we have shipped before and now replace on write.
+ *
+ * `notils.dev` was the original domain and never served the schema, so every
+ * project scaffolded with it points at a 404. Rewriting on any write (a
+ * subsequent `add` or `init`) migrates those projects silently rather than
+ * requiring a manual edit — the file's meaning is unchanged, only where the
+ * editor looks for its validation.
+ */
+const LEGACY_SCHEMA_URLS: readonly string[] = ["https://notils.dev/schema.json"];
+
+/** Whether `url` is a schema URL we used to write and should now upgrade. */
+export function isLegacySchemaUrl(url: string | undefined): boolean {
+  return url !== undefined && LEGACY_SCHEMA_URLS.includes(url);
+}
+
 export type ProjectShape = "monorepo" | "standalone";
 
 export type ProjectPaths = {
@@ -23,6 +49,15 @@ export type ProjectPaths = {
   lib: string;
   /** Where UI components go. Standalone only. */
   components: string;
+  /**
+   * Where applications live. Monorepo only — `notils add app` resolves its
+   * target directory from here rather than hardcoding `apps/`.
+   *
+   * OPTIONAL for backwards compatibility: configs written before this field
+   * existed have no `apps` and must keep working. Read it through `appsRoot()`,
+   * never directly, or an older config yields paths like `undefined/admin`.
+   */
+  apps?: string;
 };
 
 /**
@@ -65,7 +100,22 @@ const DEFAULT_PATHS: ProjectPaths = {
   packages: "packages",
   lib: "src/lib",
   components: "src/components",
+  apps: "apps",
 };
+
+/** Conventional apps directory, used when a config predates `paths.apps`. */
+export const DEFAULT_APPS_ROOT = "apps";
+
+/**
+ * Where applications live in this project, relative to the root.
+ *
+ * `paths.apps` is optional (see `ProjectPaths`), so every consumer must go
+ * through this helper rather than reading the field — a config written by an
+ * older CLI has no `apps` and would otherwise produce `undefined/<name>`.
+ */
+export function appsRoot(config: NotilsConfig): string {
+  return config.paths.apps ?? DEFAULT_APPS_ROOT;
+}
 
 export function configPath(projectRoot: string): string {
   return join(projectRoot, CONFIG_FILE_NAME);
@@ -79,10 +129,29 @@ export async function readProjectConfig(projectRoot: string): Promise<NotilsConf
   return await readJsonFile<NotilsConfig>(filePath);
 }
 
+/**
+ * Write `notils.json`, always stamping the current canonical `$schema` URL.
+ *
+ * The spread order matters: `config` is often one that was just read from disk,
+ * so it may carry a legacy `$schema`. Spreading it AFTER the default would
+ * preserve that stale URL forever — the field is set last, so every write
+ * migrates the file (see `LEGACY_SCHEMA_URLS`). A caller that deliberately wants
+ * a different URL is not a case we support: the URL is ours, not the project's.
+ */
 export async function writeProjectConfig(projectRoot: string, config: NotilsConfig): Promise<void> {
+  // Destructure `$schema` out so a legacy value read from disk cannot survive
+  // into the spread below; it is replaced with the current canonical URL. The
+  // remaining keys are written in a fixed order so `$schema` leads the file (the
+  // convention every editor and reader expects) and the rest stay stable across
+  // rewrites, keeping diffs minimal.
+  const { $schema: _replaced, shape, scope, paths, installed, ...rest } = config;
   await writeJsonFile(configPath(projectRoot), {
-    $schema: "https://notils.dev/schema.json",
-    ...config,
+    $schema: SCHEMA_URL,
+    shape,
+    scope,
+    paths,
+    ...(installed ? { installed } : {}),
+    ...rest,
   });
 }
 
@@ -297,11 +366,21 @@ export async function detectProjectConfig(projectRoot: string): Promise<Detectio
   const hasPackagesDirectory = await pathExists(join(projectRoot, "packages"));
   const isMonorepo = globs.length > 0 && hasPackagesDirectory;
 
+  const workspaceDirectories = globs
+    .map((glob) => glob.replace(/\/\*+$/, ""))
+    .filter((dir) => dir && !dir.includes("*"));
+
   // Where workspace packages live, from the globs (`packages/*` → `packages`).
   const packagesRoot =
-    globs
-      .map((glob) => glob.replace(/\/\*+$/, ""))
-      .find((dir) => dir && dir !== "apps" && !dir.includes("*")) ?? DEFAULT_PATHS.packages;
+    workspaceDirectories.find((dir) => dir !== DEFAULT_APPS_ROOT) ?? DEFAULT_PATHS.packages;
+
+  // Where applications live. Only meaningful for a monorepo, and only when the
+  // project actually declares such a workspace — a monorepo with a single
+  // `packages/*` glob and no apps directory gets the conventional default, which
+  // is where `notils add app` would create the first one anyway.
+  const detectedAppsRoot = workspaceDirectories.find(
+    (dir) => dir === DEFAULT_APPS_ROOT || dir.endsWith(`/${DEFAULT_APPS_ROOT}`)
+  );
 
   if (isMonorepo) {
     reasons.push(
@@ -341,6 +420,18 @@ export async function detectProjectConfig(projectRoot: string): Promise<Detectio
 
   // Standalone paths, from the tsconfig alias then components.json.
   const paths: ProjectPaths = { ...DEFAULT_PATHS, packages: packagesRoot };
+  if (isMonorepo) {
+    paths.apps = detectedAppsRoot ?? DEFAULT_APPS_ROOT;
+    reasons.push(
+      detectedAppsRoot
+        ? `apps "${paths.apps}" — from the workspace globs`
+        : `apps "${paths.apps}" — no apps workspace declared; using the convention`
+    );
+  } else {
+    // A standalone project has no apps directory at all; carrying the default
+    // would suggest `notils add app` works there, which it does not.
+    delete paths.apps;
+  }
   let sourceRoot: string | null = null;
 
   const tsconfig = await readJsoncFile<TsConfig>(join(projectRoot, "tsconfig.json"));

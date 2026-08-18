@@ -269,6 +269,42 @@ before touching `packages/create-notils/src/*`:
   it: `flatten.ts` already strips the `@notils/ui` scope entirely, and that
   rewrite depends on the literal string, so the scope-rename step must stay
   monorepo-only (running it first would break flatten's hardcoded match).
+- **Selection and pruning** (issues #2 and #3). The template carries every
+  capability; a generated project carries only what was selected. Three modules
+  in `@notils/transform` own the decisions, and `create-notils` owns the
+  filesystem work:
+
+  | module | decides |
+  | --- | --- |
+  | `selection.ts` | which packages survive (auth is ONE value, never a set) |
+  | `app-content.ts` | which app FILES survive — the fresh/demo split *and* the capability prune, because they are the same mechanism |
+  | `environments.ts` | which `.env*` files exist and what the resolution module says |
+  | `prune.ts` (create-notils) | removes package dirs + workspace deps |
+  | `app-source.ts` (create-notils) | rewrites the files that IMPORTED what was pruned |
+
+  **Ordering is load-bearing, and getting it wrong fails silently:**
+  - the dependency prune matches the literal `@notils/<name>` specifier, so it
+    MUST run before the monorepo scope rename;
+  - standalone must prune BEFORE `flattenToStandalone`, which folds every package
+    directory it finds and would otherwise carry a pruned one into the output.
+
+  **Deleting a file is never enough — always fix its importers.** Every bug found
+  while building this was of that shape: the nav bar removed while `layout.tsx`
+  still imported it; `globals.css` importing `@notils/ui/globals.css` after `ui`
+  was pruned; `tsconfig.json` extending `@notils/config` in an app added by
+  `add app`; a `cn()` helper written without the `clsx`/`tailwind-merge` that went
+  with the pruned package. Each produced a project that scaffolded "successfully"
+  and then failed to build. **`APP_CONTENT`'s `requires` must list every package a
+  file's imports transitively need**, not just the obvious one: the demo auth
+  pages import `@/lib/auth` (custom-backend wiring), so they require
+  `auth-custom` as well as `auth-ui` — declaring only `auth-ui` made
+  `--auth better-auth --demo` generate pages whose import had been pruned.
+
+  **Verify by building the matrix, not by reading the code.** shape × auth ×
+  demo is 12 combinations and they do not fail in the same places; two of the
+  bugs above only appeared in one cell each. `--packages none` and
+  `--auth better-auth --demo` are the two cells that broke most.
+
 - **Standalone fold is generalized over library packages** (`flatten.ts`).
   `LIBRARY_PACKAGES = ["api-client", "auth-custom", "auth-ui", "form-builder"]`
   drives it: each one's `src/*` moves to `src/lib/<name>/*` and every
@@ -495,14 +531,24 @@ Status per item: [`docs/ROADMAP.md`](../../../docs/ROADMAP.md). Package README:
   projects have all five packages on disk with no record, and reporting those as
   missing would be plainly wrong.
 
-- **Scaffolds get a `notils` SCRIPT, never a dependency** (`addNotilsScript` in
-  `scaffold.ts`): `"notils": "bunx @notils/cli"`, with the runner matched to the
-  chosen package manager (`npx` for npm **and yarn** — `yarn dlx` is Berry-only
-  and a bare `yarn` is still Classic on most machines; `pnpm dlx` for pnpm).
-  Do NOT "improve" this into a devDependency: it would pin a version that goes
-  stale, defeating the whole point that a fix reaches every project including
-  ones scaffolded long ago, and add transitive deps for a tool run a handful of
-  times. The script exists purely so someone reading `package.json` finds it.
+- **Scaffolds get `@notils/cli` as a devDependency at `latest`, plus a `notils`
+  script** (`addNotilsCli` in `scaffold.ts`). This REVERSED an earlier decision
+  (script-only, via `bunx`) — see issue #4. The reason for the reversal: the
+  commands that change a project (`add`, `add app`, later `update` / `doctor`)
+  need the CLI and the template it writes from to agree, and a project that
+  carries its own binary has one known-good version rather than whatever the
+  registry serves that minute. `pnpm exec notils` then works offline too.
+
+  The range is `latest`, deliberately not `^<version>`: a caret pin on an 0.x
+  version doesn't even permit minor upgrades, and CLI fixes should reach every
+  project. Know the tradeoff — the lockfile freezes whatever `latest` resolved to
+  at install time, so moving forward is an explicit `<manager> update
+  @notils/cli`. That is called out in the generated README, not left implicit.
+
+  `PACKAGE_RUNNER` still exists in `scaffold.ts` for the README's `skills add`
+  examples (`npx` for npm **and yarn** — `yarn dlx` is Berry-only and a bare
+  `yarn` is still Classic on most machines; `pnpm dlx` for pnpm). Don't delete it
+  with the script change.
 
 `add`, `init`, and `list` are all feature-complete against
 [docs/ROADMAP.md](../../../docs/ROADMAP.md). **`@notils/cli` has never been

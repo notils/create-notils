@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { pathExists } from "@notils/transform/filesystem";
 import { LIBRARY_PACKAGE_NAMES } from "@notils/transform/packages";
 import { rewriteSpecifiersInTree } from "@notils/transform/specifiers";
 
@@ -58,6 +59,25 @@ async function mergeGlobalStylesheet(projectRoot: string): Promise<void> {
 
   const merged = `${uiGlobalsForApp.trimEnd()}\n\n${appGlobalsWithoutImport.trimStart()}`;
   await writeTextFile(appGlobalsPath, merged);
+}
+
+/**
+ * Replace the app's `@import "@notils/ui/globals.css"` with Tailwind's own entry
+ * point, for a project that declined the ui kit.
+ *
+ * Without this the stylesheet imports a package that isn't there and the CSS
+ * build fails. The theme TOKENS are deliberately not inlined: they belong to the
+ * ui package, and `notils add ui` offers to append them (see the CLI's theme
+ * step), so duplicating them here would put two copies in play.
+ */
+async function inlineTailwindImport(projectRoot: string): Promise<void> {
+  const appGlobalsPath = join(projectRoot, "apps/app/src/app/globals.css");
+  const contents = await readFile(appGlobalsPath, "utf8");
+  const rewritten = contents.replace(
+    /@import\s+["']@notils\/ui\/globals\.css["'];/,
+    '@import "tailwindcss";'
+  );
+  await writeTextFile(appGlobalsPath, rewritten);
 }
 
 /** Step 4: inline the shared tsconfig chain into the app's tsconfig. */
@@ -186,7 +206,12 @@ async function mergePackageJson(
   foldedLibraryPackages: string[]
 ): Promise<void> {
   const app = await readJsonFile<PackageJson>(join(projectRoot, "apps/app/package.json"));
-  const ui = await readJsonFile<PackageJson>(join(projectRoot, "packages/ui/package.json"));
+  // Absent when the project declined the ui kit — an empty manifest contributes no
+  // dependencies, which is exactly right.
+  const uiPackageJsonPath = join(projectRoot, "packages/ui/package.json");
+  const ui: PackageJson = (await pathExists(uiPackageJsonPath))
+    ? await readJsonFile<PackageJson>(uiPackageJsonPath)
+    : {};
   const libraries = await Promise.all(
     foldedLibraryPackages.map((library) =>
       readJsonFile<PackageJson & { peerDependencies?: Record<string, string> }>(
@@ -220,14 +245,18 @@ async function mergePackageJson(
 
   // Keep the app's run scripts; add lint/format, the ui kit's shadcn helpers,
   // and husky's prepare hook (the monorepo root owned these).
+  //
+  // The `ui:*` scripts are conditional: without the kit there is no
+  // `components.json` for shadcn to read, so the scripts would fail on first use.
+  // `notils add ui` writes both the kit and its config together.
+  const hasUi = Object.keys(ui).length > 0;
   const scripts: Record<string, string> = {
     ...app.scripts,
     lint: "biome lint .",
     "lint:fix": "biome check . --write",
     "lint:unsafe": "biome check . --write --unsafe",
     format: "biome format --write .",
-    "ui:add": "shadcn add",
-    "ui:diff": "shadcn add --diff",
+    ...(hasUi ? { "ui:add": "shadcn add", "ui:diff": "shadcn add --diff" } : {}),
     prepare: "husky",
   };
 
@@ -254,6 +283,10 @@ async function mergePackageJson(
 /** Step 5: rewrite components.json aliases + css path to the standalone layout. */
 async function rewriteComponentsJson(projectRoot: string): Promise<void> {
   const componentsJsonPath = join(projectRoot, "packages/ui/components.json");
+  // No ui package means no shadcn config to rewrite. `notils add ui` writes one.
+  if (!(await pathExists(componentsJsonPath))) {
+    return;
+  }
   const componentsJson = await readJsonFile<{
     tailwind?: Record<string, unknown>;
     aliases?: Record<string, string>;
@@ -287,16 +320,36 @@ export async function flattenToStandalone(projectRoot: string, projectName: stri
   const uiSrc = join(projectRoot, "packages/ui/src");
   const appSrc = join(appDir, "src");
 
+  // Whether the ui package survived selection (issue #3 makes it declinable).
+  // Every ui-specific step below is conditional on this: a project that declined
+  // the kit has no packages/ui to read, and unconditional copies used to throw
+  // mid-flatten, leaving a half-monorepo/half-standalone project behind.
+  const hasUi = await pathExists(uiSrc);
+
   // 1. Merge theme (reads both globals before we move anything).
-  await mergeGlobalStylesheet(projectRoot);
+  if (hasUi) {
+    await mergeGlobalStylesheet(projectRoot);
+  } else {
+    // No ui package, so the app's globals.css still `@import`s a stylesheet that
+    // no longer exists. Replace the import with Tailwind's own entry point so the
+    // project still compiles CSS.
+    await inlineTailwindImport(projectRoot);
+  }
 
   // 2. Move the ui kit source into the app's src/. `components` and `lib` always
-  //    exist; `hooks` and `theme` are optional (an empty/absent dir isn't tracked
-  //    by git), so copy them only if present.
-  await copyDirectory(join(uiSrc, "components"), join(appSrc, "components"));
-  await copyDirectory(join(uiSrc, "lib"), join(appSrc, "lib"));
-  await copyDirectoryIfExists(join(uiSrc, "hooks"), join(appSrc, "hooks"));
-  await copyDirectoryIfExists(join(uiSrc, "theme"), join(appSrc, "theme"));
+  //    exist when the package does; `hooks` and `theme` are optional (an
+  //    empty/absent dir isn't tracked by git), so copy them only if present.
+  if (hasUi) {
+    await copyDirectory(join(uiSrc, "components"), join(appSrc, "components"));
+    await copyDirectory(join(uiSrc, "lib"), join(appSrc, "lib"));
+    await copyDirectoryIfExists(join(uiSrc, "hooks"), join(appSrc, "hooks"));
+    await copyDirectoryIfExists(join(uiSrc, "theme"), join(appSrc, "theme"));
+  }
+  // No `else`: a ui-less project deliberately gets NO src/lib/utils.ts. The `cn()`
+  // helper needs `clsx` and `tailwind-merge`, which are the ui package's
+  // dependencies and were pruned with it — writing the helper anyway produced a
+  // project that failed to build on an unresolvable import. Nothing here imports
+  // `cn`, and `notils add ui` writes the helper together with its dependencies.
 
   // 2b. Fold every other internal library package (api-client, auth-custom,
   //     auth-ui, form-builder, ...) into src/lib/<package>/. Copy-if-exists:

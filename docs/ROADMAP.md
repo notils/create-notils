@@ -235,12 +235,22 @@ Full design and spike results:
 
 Remaining:
 
+- [x] **Scaffold-time prompt**: `Authentication? (None / Custom authentication /
+      Better Auth)`, with `--auth none|custom|better-auth` for CI. Shipped with
+      issue #3. Selecting one generates ONLY that provider — the competing
+      implementation is never written, along with its dependencies.
 - [ ] **A runnable example in the template.** `apps/app` wires `auth-custom`
       against mock routes; there is no equivalent Better Auth wiring (route
-      handler via `toNextJsHandler`, a Drizzle adapter, `.env` keys). Until then
-      the provider is verified by types, not by a booting app.
-- [ ] **Scaffold-time prompt**: `Add authentication? (No / Better Auth / Custom
-      backend)`. Needs the above first — there's nothing to scaffold yet.
+      handler via `toNextJsHandler`, a Drizzle adapter, `.env` keys).
+      **Consequence to know:** every demo auth page imports the contract from
+      `src/lib/auth.ts`, which is custom-backend wiring — so those pages are
+      declared in `@notils/transform/app-content` as requiring `auth-custom`, and
+      `--auth better-auth --demo` generates the packages but NO auth pages. That
+      is deliberate: the alternative (keeping pages whose import was pruned) ships
+      a project that doesn't typecheck, which is exactly what it did before this
+      was declared correctly. The provider is verified by types, not a booting app.
+- [ ] **Demo pages for Better Auth**, so `--auth better-auth --demo` produces a
+      working reference like the custom-backend one does. Needs the above first.
 - [ ] **Golden build test** extended to cover a Better Auth scaffold.
 - [ ] Confirm hands-on whether `better-auth-ui`'s shadcn variant targets Radix
       (it appears to) and what that means in practice for a project mixing it with

@@ -6,9 +6,12 @@ import { cancel, intro, log, note, outro, spinner } from "@clack/prompts";
 import pc from "picocolors";
 import tiged from "tiged";
 
+import { type AppContentPlan, planAppContent } from "@notils/transform/app-content";
 import { runCommand } from "@notils/transform/process";
 import { writeProjectConfig } from "@notils/transform/project-config";
+import { type ResolvedSelection, resolveSelection } from "@notils/transform/selection";
 
+import { rewriteAppSource } from "./app-source.js";
 import { generateApps } from "./apps.js";
 import { parseCli } from "./cli.js";
 import {
@@ -17,13 +20,19 @@ import {
   resolveScaffoldConfig,
   type ScaffoldConfig,
 } from "./config.js";
+import { configureEnvironments } from "./environment.js";
 import { replaceInDirectoryTree } from "./filesystem.js";
 import { flattenToStandalone } from "./flatten.js";
 import { initializeGitRepository } from "./git.js";
 import { resetRootMetadata } from "./metadata.js";
+import {
+  applyAppContentPlan,
+  removePrunedDependencies,
+  removePrunedPackageDirectories,
+} from "./prune.js";
 import { writeGeneratedReadme } from "./readme.js";
 import {
-  addNotilsScript,
+  addNotilsCli,
   alignPackageManagerField,
   configurePnpmWorkspace,
   configurePreCommitHook,
@@ -99,17 +108,23 @@ async function sortImports(projectRoot: string, packageManager: PackageManager):
   });
 }
 
+/** What `configureProject` decided, so the caller can report it to the user. */
+type ConfigureResult = {
+  selection: ResolvedSelection;
+  appContentPlan: AppContentPlan;
+};
+
 /**
  * Apply every transform the scaffolded copy needs, in order. Kept as one small
  * function so the sequence reads top-to-bottom:
  *   strip internals → rebrand source → reset metadata → generate apps →
- *   write README → align package manager + hook.
+ *   prune unselected capabilities → write README → align package manager + hook.
  */
 async function configureProject(
   projectRoot: string,
   config: ScaffoldConfig,
   cliVersion: string
-): Promise<void> {
+): Promise<ConfigureResult> {
   await stripInternalPaths(projectRoot);
 
   // Rename the source identifier only (never package.json metadata — that is
@@ -119,11 +134,39 @@ async function configureProject(
     { find: "create-notils", replaceWith: config.projectName },
   ]);
 
+  // Resolve the selection ONCE and reuse it: the package prune, the app-content
+  // prune, and the report must all be driven by the same decision.
+  const selection = resolveSelection(config.selection);
+  const appContentPlan = planAppContent({
+    keptPackages: selection.keptNames,
+    includeDemo: config.includeDemo,
+  });
+
   if (config.projectType === "monorepo") {
     // Monorepo: reset the root metadata, then expand the template app into the
     // requested set of apps.
     await resetRootMetadata(projectRoot, { projectName: config.projectName });
     await generateApps(projectRoot, config.appNames);
+
+    // Prune BEFORE the scope rename below: the dependency prune matches on the
+    // literal `@notils/<name>` specifier, so running it afterwards would find
+    // nothing and silently leave every stale workspace dependency in place.
+    await removePrunedPackageDirectories(projectRoot, selection);
+    await removePrunedDependencies(projectRoot, selection);
+
+    // Apply the app-content plan to every generated app. Each app is a copy of
+    // the same template app, so they all need the same treatment.
+    for (const appName of config.appNames) {
+      const appDirectory = join(projectRoot, "apps", appName);
+      await applyAppContentPlan(appDirectory, appContentPlan);
+      await rewriteAppSource(appDirectory, {
+        plan: appContentPlan,
+        projectName: config.projectName,
+        includeDemo: config.includeDemo,
+        hasUi: selection.keptNames.has("ui"),
+        rewriteStylesheet: true,
+      });
+    }
 
     // The internal workspace packages (packages/ui, packages/config) keep the
     // `@notils/*` scope otherwise — rename it to the project's own scope, across
@@ -136,9 +179,30 @@ async function configureProject(
       { find: "@notils/", replaceWith: `@${config.projectName}/` },
     ]);
   } else {
-    // Standalone: fold packages/ui + packages/config into a single Next app and
-    // promote it to the root. flattenToStandalone writes clean root metadata
-    // itself, so no separate resetRootMetadata is needed.
+    // Standalone. Prune FIRST, before flattening: flatten folds every package
+    // directory it finds into src/lib/ and merges their dependencies, so a
+    // package still on disk here would end up in the flattened project no matter
+    // what was selected.
+    await removePrunedPackageDirectories(projectRoot, selection);
+    await removePrunedDependencies(projectRoot, selection);
+
+    // The app-content prune also runs pre-flatten, while the app is still at
+    // apps/app — the paths in the plan are app-relative, and flatten promotes the
+    // app to the root afterwards. Doing it now means flatten's package.json merge
+    // and specifier rewrite never see the removed files.
+    const templateAppDirectory = join(projectRoot, "apps", "app");
+    await applyAppContentPlan(templateAppDirectory, appContentPlan);
+    await rewriteAppSource(templateAppDirectory, {
+      plan: appContentPlan,
+      projectName: config.projectName,
+      includeDemo: config.includeDemo,
+      hasUi: selection.keptNames.has("ui"),
+      rewriteStylesheet: false,
+    });
+
+    // Fold packages/ui + packages/config into a single Next app and promote it to
+    // the root. flattenToStandalone writes clean root metadata itself, so no
+    // separate resetRootMetadata is needed.
     await flattenToStandalone(projectRoot, config.projectName);
   }
 
@@ -154,7 +218,25 @@ async function configureProject(
     // `lib`/`components` are the standalone fold targets. They're unused in a
     // monorepo (where `add` writes a whole package under `packages/`), but kept
     // as the scaffold's own defaults so the file has one shape in both cases.
-    paths: { packages: "packages", lib: "src/lib", components: "src/components" },
+    //
+    // `apps` is written for a monorepo only — that's where `notils add app`
+    // creates new applications. A standalone project has no apps directory, and
+    // recording one would imply the command works there.
+    paths: {
+      packages: "packages",
+      lib: "src/lib",
+      components: "src/components",
+      ...(config.projectType === "monorepo" ? { apps: "apps" } : {}),
+    },
+  });
+
+  // After the shape branch: the module lands in packages/config (monorepo) or
+  // src/ (standalone), and standalone only has its final root after flatten.
+  await configureEnvironments(projectRoot, {
+    setup: config.environmentSetup,
+    projectName: config.projectName,
+    projectType: config.projectType,
+    scope: config.projectType === "monorepo" ? `@${config.projectName}` : null,
   });
 
   await writeGeneratedReadme(projectRoot, {
@@ -163,6 +245,9 @@ async function configureProject(
     packageManager: config.packageManager,
     cliVersion,
     includeSkills: config.includeSkills,
+    selection,
+    environmentSetup: config.environmentSetup,
+    includeDemo: config.includeDemo,
   });
 
   // After the shape branch: standalone promotes the app to the root, which moves
@@ -172,13 +257,66 @@ async function configureProject(
 
   // After the shape branch above, so the root package.json it edits is the final
   // one (both resetRootMetadata and flattenToStandalone rewrite that file).
-  await addNotilsScript(projectRoot, config.packageManager);
+  await addNotilsCli(projectRoot);
 
   await alignPackageManagerField(projectRoot, config.packageManager);
   await removeBunArtifacts(projectRoot, config.packageManager);
   await configurePnpmWorkspace(projectRoot, config.packageManager);
   await normalizeWorkspaceProtocol(projectRoot, config.packageManager);
   await configurePreCommitHook(projectRoot, config.packageManager);
+
+  return { selection, appContentPlan };
+}
+
+/**
+ * Report what the selection produced: which capabilities are in, which were left
+ * out, and anything that came along as a dependency.
+ *
+ * The implied-packages line matters most. Selecting `form-builder` without `ui`
+ * still installs `ui`, and saying so is the difference between "the CLI respected
+ * my choice and explained an unavoidable consequence" and "the CLI ignored me".
+ */
+function reportSelection(config: ScaffoldConfig, configured: ConfigureResult): void {
+  const { selection, appContentPlan } = configured;
+
+  const kept = selection.keptPackages.filter((pkg) => pkg.name !== "config").map((pkg) => pkg.name);
+  const lines = [
+    `${pc.green("included")}  ${kept.length > 0 ? kept.join(", ") : pc.dim("(none — a bare Next.js app)")}`,
+    `${pc.dim("auth")}      ${config.selection.auth}`,
+    `${pc.dim("env")}       ${config.environmentSetup}`,
+    `${pc.dim("app")}       ${config.includeDemo ? "demo (example pages included)" : "fresh (no example content)"}`,
+  ];
+
+  if (selection.impliedNames.length > 0) {
+    lines.push(
+      `${pc.cyan("also")}      ${selection.impliedNames.join(", ")} ${pc.dim("(required by what you selected)")}`
+    );
+  }
+  if (selection.prunedNames.length > 0) {
+    lines.push(`${pc.dim("left out")}  ${pc.dim(selection.prunedNames.join(", "))}`);
+  }
+  if (appContentPlan.removePaths.length > 0) {
+    lines.push(
+      `${pc.dim("removed")}   ${pc.dim(`${appContentPlan.removePaths.length} template file(s) you didn't ask for`)}`
+    );
+  }
+
+  note(lines.join("\n"), "Your project");
+
+  // The template's example auth pages are wired to the custom-backend provider
+  // (they import the contract from src/lib/auth.ts), so a Better Auth demo gets
+  // the packages but no pages. Saying so beats letting someone hunt for a
+  // /login route that was never going to be there. See docs/ROADMAP.md.
+  if (config.includeDemo && config.selection.auth === "better-auth") {
+    log.warn(
+      "The example auth pages are wired to the custom-backend provider, so they weren't generated."
+    );
+    log.message(
+      pc.dim(
+        "  Better Auth is installed and ready to wire up — see packages/auth-better-auth. Use --auth custom for the runnable example."
+      )
+    );
+  }
 }
 
 function printNextSteps(config: ScaffoldConfig): void {
@@ -240,8 +378,10 @@ async function main(): Promise<void> {
   progress.stop("Template fetched");
 
   progress.start("Configuring project");
-  await configureProject(targetDirectory, config, cliVersion);
+  const configured = await configureProject(targetDirectory, config, cliVersion);
   progress.stop("Project configured");
+
+  reportSelection(config, configured);
 
   let installed = false;
   if (config.installDependencies) {

@@ -61,6 +61,32 @@ export async function fetchPackageSource(packageName: string): Promise<string> {
   return destination;
 }
 
+/**
+ * The template's single app directory. `create-notils` copies this to produce each
+ * app in a scaffold, and `notils add app` fetches the same thing — so an app added
+ * later is generated from identical source to one created at scaffold time.
+ */
+const TEMPLATE_APP_PATH = "apps/app";
+
+/** Fetch the template app into a fresh temp directory and return its path. */
+export async function fetchAppSource(): Promise<string> {
+  const destination = await mkdtemp(join(tmpdir(), "notils-add-app-"));
+  const source = `${TEMPLATE_REPOSITORY}/${TEMPLATE_APP_PATH}#${templateRef()}`;
+  const emitter = tiged(source, { cache: false, force: true, mode: "tar" });
+  try {
+    await emitter.clone(destination);
+  } catch (error) {
+    await rm(destination, { recursive: true, force: true });
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not fetch the app template from ${source}.\n` +
+        `  ${detail}\n` +
+        `  Check that the ref "${templateRef()}" exists in ${TEMPLATE_REPOSITORY}.`
+    );
+  }
+  return destination;
+}
+
 /** Remove a temp directory created by `fetchPackageSource`. */
 export async function cleanupFetched(directory: string): Promise<void> {
   await rm(directory, { recursive: true, force: true });

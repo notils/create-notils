@@ -5,6 +5,7 @@ import { cancel, intro, outro } from "@clack/prompts";
 import pc from "picocolors";
 
 import { runAdd } from "./add.js";
+import { runAddApp } from "./add-app.js";
 import { parseCli } from "./cli.js";
 import { CancelledError, runInit } from "./init.js";
 import { runList } from "./list.js";
@@ -44,6 +45,11 @@ async function main(): Promise<void> {
 
     case "add":
       await runAdd(projectRoot, parsed.packages, parsed.options);
+      outro(pc.green("Done."));
+      break;
+
+    case "add-app":
+      await runAddApp(projectRoot, parsed.appName, parsed.options);
       outro(pc.green("Done."));
       break;
   }

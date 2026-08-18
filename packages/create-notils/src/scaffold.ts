@@ -279,31 +279,53 @@ export const PACKAGE_RUNNER: Record<PackageManager, string> = {
 };
 
 /**
- * Add a `notils` script pointing at `@notils/cli` — the tool that adds
- * capabilities (auth, form-builder, …) to an existing project.
+ * The version range written for the `@notils/cli` devDependency.
  *
- * A SCRIPT, deliberately not a dependency. `@notils/cli` is stateless and is
- * meant to be run via the package runner, so it always resolves the newest
- * published version: a fix reaches every project, including ones scaffolded
- * long ago. A devDependency would pin a version that goes stale and would add
- * transitive deps to every scaffold for a tool run a handful of times. The
- * script exists purely for discoverability — someone reading `package.json`
- * finds it without having read the README.
+ * `latest` rather than a caret range on the version that scaffolded the project:
+ * the CLI is a stateless tool whose fixes should reach every project, and a
+ * caret pin on an 0.x version doesn't even allow minor upgrades. `latest`
+ * resolves to the newest published version at install time.
+ *
+ * Note the consequence, documented in the generated README: the lockfile freezes
+ * whatever `latest` resolved to, so moving forward later is an explicit
+ * `<manager> update @notils/cli`. That is the tradeoff for having a local
+ * binary at all — see `addNotilsCli`.
+ */
+const NOTILS_CLI_VERSION_RANGE = "latest";
+
+/**
+ * Install `@notils/cli` as a devDependency and add a `notils` script — the tool
+ * that adds capabilities (auth, form-builder, …) and applications to an existing
+ * project.
+ *
+ * A local devDependency, not just a `bunx` script (see issue #4): every project
+ * then carries its own CLI binary, so `bun run notils` / `pnpm exec notils` work
+ * offline and resolve one known-good version rather than whatever the registry
+ * serves that minute. That matters most for the commands that CHANGE a project —
+ * `add`, `add app`, and later `update` / `doctor` — where the CLI and the
+ * template it writes from need to agree.
+ *
+ * The script stays for discoverability: someone reading `package.json` finds the
+ * entry point without having read the README. It invokes the bare binary, which
+ * the package manager resolves from the local install.
  *
  * Written at the project root in both shapes: that's where `notils.json` lives
  * and where `add` writes, for a monorepo (`packages/*`) as much as a standalone
  * project (`src/*`).
  */
-export async function addNotilsScript(
-  projectRoot: string,
-  packageManager: PackageManager
-): Promise<void> {
+export async function addNotilsCli(projectRoot: string): Promise<void> {
   const packageJsonPath = join(projectRoot, "package.json");
-  const packageJson = await readJsonFile<{ scripts?: Record<string, string> }>(packageJsonPath);
-  packageJson.scripts = {
-    ...packageJson.scripts,
-    notils: `${PACKAGE_RUNNER[packageManager]} @notils/cli`,
+  const packageJson = await readJsonFile<{
+    scripts?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  }>(packageJsonPath);
+
+  packageJson.scripts = { ...packageJson.scripts, notils: "notils" };
+  packageJson.devDependencies = {
+    ...packageJson.devDependencies,
+    "@notils/cli": NOTILS_CLI_VERSION_RANGE,
   };
+
   await writeJsonFile(packageJsonPath, packageJson);
 }
 

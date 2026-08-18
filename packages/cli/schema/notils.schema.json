@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://notils.com/schema.json",
+  "title": "Notils Project Configuration",
+  "description": "Configuration for projects managed by the Notils CLI. Written by create-notils at scaffold time, or by `notils init` in an existing project. See https://github.com/notils/create-notils.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["shape", "paths"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of this schema, for editor validation.",
+      "format": "uri"
+    },
+    "shape": {
+      "description": "The project layout. `monorepo` has workspaces with packages under `paths.packages`; `standalone` is a single Next.js app where everything resolves through the `@/*` alias.",
+      "type": "string",
+      "enum": ["monorepo", "standalone"]
+    },
+    "scope": {
+      "description": "The project's own npm package scope, with the leading `@` and no trailing slash (e.g. `@my-app`). Monorepo only — `add` writes imports in this scope. Null for standalone, which has no scope.",
+      "type": ["string", "null"],
+      "pattern": "^@[a-z0-9][a-z0-9._-]*$"
+    },
+    "paths": {
+      "description": "Where generated code goes. `packages` applies to a monorepo; `lib` and `components` apply to a standalone project.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "description": "Workspace packages root, relative to the project root. Monorepo only.",
+          "type": "string",
+          "minLength": 1
+        },
+        "lib": {
+          "description": "Where folded library packages go, relative to the project root. Standalone only.",
+          "type": "string",
+          "minLength": 1
+        },
+        "components": {
+          "description": "Where UI components go, relative to the project root. Standalone only.",
+          "type": "string",
+          "minLength": 1
+        },
+        "apps": {
+          "description": "Where applications live, relative to the project root. Monorepo only — used by `notils add app`.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "installed": {
+      "description": "Which packages `notils add` has written, and from which template ref, so `notils list` can report drift. Absent means unknown (e.g. packages that came from the scaffold), never \"nothing installed\".",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref"],
+        "properties": {
+          "ref": {
+            "description": "The template ref this package's source came from, e.g. \"v0.5.0\".",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

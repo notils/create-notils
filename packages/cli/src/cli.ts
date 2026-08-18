@@ -33,8 +33,23 @@ export type InitOptions = {
   yes?: boolean;
 };
 
+export type AddAppOptions = {
+  /** Skip the confirmation prompt. */
+  yes?: boolean;
+  /** Report what would be created without touching the filesystem. */
+  dryRun?: boolean;
+  /** Skip the post-write formatter pass. */
+  skipFormat?: boolean;
+  /**
+   * Include the example pages and flows. Default false — a new app is a clean
+   * starting point (issue #2), consistent with what a fresh scaffold produces.
+   */
+  demo?: boolean;
+};
+
 export type ParsedCli =
   | { command: "add"; packages: string[]; options: AddOptions }
+  | { command: "add-app"; appName: string; options: AddAppOptions }
   | { command: "init"; options: InitOptions }
   | { command: "list"; options: Record<string, never> }
   /** commander already printed help/version and we should exit quietly. */
@@ -50,7 +65,7 @@ export function buildProgram(cliVersion: string): Command {
     )
     .version(cliVersion, "-v, --version", "output the CLI version");
 
-  program
+  const add = program
     .command("add")
     .description("add one or more capabilities to this project")
     .argument("<packages...>", "capabilities to add (see `notils list`)")
@@ -73,8 +88,27 @@ Examples:
   $ bunx @notils/cli add ui
   $ bunx @notils/cli add auth-ui          # pulls auth-custom, api-client, form-builder, ui
   $ bunx @notils/cli add form-builder --dry-run
+  $ bunx @notils/cli add app admin        # add another app to a monorepo
 `
     );
+
+  // `add app <name>` is documented as a subcommand of `add` (issue #1's spelling),
+  // but it is NOT declared as a commander subcommand. Attaching one to `add` makes
+  // commander treat `add`'s first argument as a command name and reject the
+  // existing `add ui` with "unknown command 'ui'" — the variadic argument and a
+  // nested command cannot coexist on the same command.
+  //
+  // Instead `add` keeps its variadic argument, and `parseCli` below dispatches on
+  // the literal first token being "app". `app` is not a capability name (see
+  // INTERNAL_PACKAGES), so there is no ambiguity to resolve.
+  add.option("--demo", "with `add app`: include the example pages and auth flows").addHelpText(
+    "after",
+    `
+Adding an app:
+  $ bunx @notils/cli add app admin
+  $ bunx @notils/cli add app console --demo
+`
+  );
 
   program
     .command("init")
@@ -110,13 +144,29 @@ export function parseCli(argv: string[], cliVersion: string): ParsedCli {
   }
 
   switch (subcommand) {
-    case "add":
+    case "add": {
+      // `add app <name>` — dispatched on the literal token rather than a commander
+      // subcommand (see buildProgram for why). The flags are `add`'s own, which is
+      // where commander has parsed them.
+      if (command.args[0] === "app") {
+        const appName = command.args[1];
+        if (appName === undefined) {
+          throw new Error("`add app` needs a name, e.g. `notils add app admin`.");
+        }
+        if (command.args.length > 2) {
+          throw new Error(
+            `\`add app\` takes one name, but got: ${command.args.slice(1).join(", ")}.`
+          );
+        }
+        return { command: "add-app", appName, options: command.opts<AddAppOptions>() };
+      }
       return {
         command: "add",
         // commander collects variadic args on the subcommand, not the program.
         packages: command.args,
         options: command.opts<AddOptions>(),
       };
+    }
     case "init":
       return { command: "init", options: command.opts<InitOptions>() };
     case "list":

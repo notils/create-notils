@@ -22,6 +22,17 @@ export type CliOptions = {
   git?: boolean;
   /** `--skills` / `--no-skills`. Undefined when unspecified. */
   skills?: boolean;
+  /** `--auth <choice>`: "none" | "custom" | "better-auth". Validated downstream. */
+  auth?: string;
+  /** `--packages <names>`: comma-separated optional package names, or "none". */
+  packages?: string;
+  /** `--env <setup>`: "single" | "dev-prod" | "dev-staging-prod". */
+  env?: string;
+  /**
+   * `--demo` / `--no-demo`: include the example pages and flows. Undefined when
+   * unspecified; a fresh app is the default (issue #2).
+   */
+  demo?: boolean;
   /** `-y, --yes`: accept all defaults without prompting. */
   yes?: boolean;
 };
@@ -54,6 +65,11 @@ export function buildProgram(cliVersion: string): Command {
     .option("--no-git", "skip git initialization")
     .option("--skills", "include the notils agent guide (default)")
     .option("--no-skills", "skip the notils agent guide")
+    .option("--auth <choice>", "authentication: none | custom | better-auth")
+    .option("--packages <names>", "optional packages: ui,api-client,form-builder (or none)")
+    .option("--env <setup>", "environments: single | dev-prod | dev-staging-prod")
+    .option("--demo", "include the example pages and auth flows")
+    .option("--no-demo", "generate a clean app with no example content (default)")
     .option("-y, --yes", "accept all defaults without prompting")
     .addHelpText(
       "after",
@@ -62,6 +78,8 @@ Examples:
   $ npm create notils@latest my-app
   $ npm create notils@latest my-app -- --type standalone --pm pnpm
   $ npm create notils@latest shop -- --type monorepo --apps admin,storefront -y
+  $ npm create notils@latest my-app -- --auth better-auth --packages ui,api-client --env single
+  $ npm create notils@latest my-app -- --demo   # the full reference app
 `
     );
 

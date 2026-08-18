@@ -10,7 +10,10 @@
     "./packages": "./src/packages.ts",
     "./project-config": "./src/project-config.ts",
     "./process": "./src/process.ts",
-    "./filesystem": "./src/filesystem.ts"
+    "./filesystem": "./src/filesystem.ts",
+    "./selection": "./src/selection.ts",
+    "./environments": "./src/environments.ts",
+    "./app-content": "./src/app-content.ts"
   },
   "scripts": {
     "check:detection": "bun run scripts/check-detection.ts",
