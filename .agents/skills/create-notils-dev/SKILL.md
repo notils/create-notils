@@ -305,6 +305,34 @@ before touching `packages/create-notils/src/*`:
   bugs above only appeared in one cell each. `--packages none` and
   `--auth better-auth --demo` are the two cells that broke most.
 
+- **A generated workspace package needs `scripts`, `devDependencies`, AND a
+  resolvable `extends` — all three, or it is quietly broken.** `add` builds the
+  manifest from scratch (`manifestFilesFor` in `write-package.ts`) to avoid
+  propagating this repo's pinned ranges, and it originally omitted too much:
+
+  | omitted | consequence |
+  | --- | --- |
+  | `scripts` | **Turborepo silently skips a package with no `typecheck`/`lint` script** — the added package was never checked at all, and `turbo run typecheck` reported success over a package that didn't compile |
+  | `devDependencies` | no `@<scope>/config`, so the tsconfig `extends` has no reason to resolve; no `typescript`/`@types/*`, so it can't typecheck alone |
+  | external `dependencies` | a monorepo package must declare its own imports or the workspace won't resolve them for it — `zod` landed in the ROOT `dependencies` while the package declared nothing |
+
+  The version rule still holds: internal deps are `workspace:*`, externals are
+  `"*"`, peer ranges are kept verbatim (they're compatibility statements, not our
+  pins). `"*"` plus an install run **in the package's own directory** lets the
+  user's manager write a real range in the right file.
+
+  **Never hardcode a tsconfig `extends`.** It was `"../../tsconfig.json"`, which is
+  wrong twice: a create-notils monorepo has no root tsconfig (packages extend
+  `@<scope>/config/tsconfig.{base,react}.json`), and `../../` assumes
+  `paths.packages` is exactly one level deep. Detect the config package's preset
+  first, then a real root tsconfig by *computed* depth, then emit no `extends` —
+  a tsconfig pointing at a missing file is strictly worse than a standalone one,
+  because it inherits nothing AND errors. Reported from a real project after
+  v0.6.0 shipped; the silent-skip above is why our own matrix missed it.
+
+  **When adding a check to the verification matrix, confirm the task actually
+  RAN** — compare Turbo's task count before and after, not just its exit code.
+
 - **Any in-memory state the template keeps MUST be pinned to `globalThis`.**
   Next bundles each route handler and each page render separately, so a
   module-level `const` in `src/lib/` is instantiated **more than once per

@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { confirm, isCancel, log, note, spinner } from "@clack/prompts";
+import { confirm, isCancel, log, note, select, spinner } from "@clack/prompts";
 import pc from "picocolors";
 
 import { PRUNABLE_APP_DIRECTORIES, planAppContent } from "@notils/transform/app-content";
@@ -90,16 +90,14 @@ export async function runAddApp(
   // What this project actually has, so the new app matches it rather than the
   // template's full feature set.
   const installedPackages = await detectInstalledPackages(projectRoot, config);
-  const plan = planAppContent({
-    keptPackages: installedPackages,
-    includeDemo: options.demo === true,
-  });
+  const includeDemo = await resolveIncludeDemo(options, installedPackages);
+  const plan = planAppContent({ keptPackages: installedPackages, includeDemo });
 
   note(
     [
       `${pc.bold(appName)} ${pc.dim(`→ ${apps}/${appName}`)}`,
       `${pc.dim("port")}      ${devPort}`,
-      `${pc.dim("app")}       ${options.demo ? "demo (example pages included)" : "fresh (no example content)"}`,
+      `${pc.dim("app")}       ${includeDemo ? "demo (example pages included)" : "fresh (no example content)"}`,
       `${pc.dim("uses")}      ${[...installedPackages].filter((name) => name !== "config").join(", ") || pc.dim("(no shared packages installed)")}`,
     ].join("\n"),
     options.dryRun ? "Would create" : "New app"
@@ -135,7 +133,7 @@ export async function runAddApp(
       fetchedRoot: fetched,
     });
     await applyContentPlan(targetDirectory, plan);
-    await rewriteLayoutAndPage(targetDirectory, appName, installedPackages, plan, options);
+    await rewriteLayoutAndPage(targetDirectory, appName, installedPackages, plan, includeDemo);
     progress.stop(`Created ${apps}/${appName} (${fileCount} file(s))`);
   } finally {
     await cleanupFetched(fetched);
@@ -153,6 +151,57 @@ export async function runAddApp(
   if (!options.skipFormat) {
     await formatProject(projectRoot);
   }
+}
+
+/**
+ * Fresh app or demo app — asked, not assumed.
+ *
+ * `--demo` / `--no-demo` win when given, and `--yes` takes the fresh default
+ * without asking. Otherwise this PROMPTS, matching what `create-notils` asks at
+ * scaffold time: silently defaulting meant `--demo` was the only way to discover
+ * the option existed at all.
+ *
+ * Skipped when the project has no `auth-ui` and no `form-builder`, because then
+ * there is no demo content left to include — every demo file needs one of them, so
+ * the question would have exactly one possible answer.
+ */
+async function resolveIncludeDemo(
+  options: AddAppOptions,
+  installedPackages: Set<string>
+): Promise<boolean> {
+  if (options.demo !== undefined) {
+    return options.demo;
+  }
+
+  const hasDemoContent = installedPackages.has("auth-ui") || installedPackages.has("form-builder");
+  if (!hasDemoContent) {
+    return false;
+  }
+
+  // No TTY (CI, piped input) or `--yes`: take the documented default rather than
+  // hanging on a prompt nobody can answer.
+  if (options.yes || process.stdin.isTTY !== true) {
+    return false;
+  }
+
+  const answer = await select({
+    message: "What would you like to create?",
+    options: [
+      {
+        value: false,
+        label: "Fresh app (recommended)",
+        hint: "a clean, production-ready starting point",
+      },
+      {
+        value: true,
+        label: "Demo app",
+        hint: "example pages wired to this project's capabilities",
+      },
+    ],
+    initialValue: false,
+  });
+  if (isCancel(answer)) throw new CancelledError();
+  return answer;
 }
 
 /** Existing app directory names, or an empty list when `apps/` doesn't exist yet. */
@@ -439,7 +488,7 @@ async function rewriteLayoutAndPage(
   appName: string,
   installedPackages: Set<string>,
   plan: ReturnType<typeof planAppContent>,
-  options: AddAppOptions
+  includeDemo: boolean
 ): Promise<void> {
   const hasUi = installedPackages.has("ui");
   const layoutPath = join(appDirectory, "src", "app", "layout.tsx");
@@ -478,8 +527,7 @@ async function rewriteLayoutAndPage(
 
   // The template page renders the example form; it survives only for a demo app
   // that also has form-builder.
-  const keepsTemplatePage =
-    options.demo === true && !plan.removePaths.includes("src/app/contact-form.tsx");
+  const keepsTemplatePage = includeDemo && !plan.removePaths.includes("src/app/contact-form.tsx");
   if (!keepsTemplatePage) {
     await writeFile(
       join(appDirectory, "src", "app", "page.tsx"),

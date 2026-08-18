@@ -57,7 +57,7 @@ export async function runAdd(
   // files are present but whose deps are not still doesn't compile.)
   if (summary.newCount === 0 && summary.modifiedCount === 0) {
     log.success("Source files are already up to date.");
-    await mergeDependencies(projectRoot, plans, options);
+    await mergeDependencies(projectRoot, plans, options, config);
     await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
     return;
   }
@@ -66,7 +66,7 @@ export async function runAdd(
     // Preview the dependency and theme steps too — the point of a dry run is to
     // see everything that would happen, and these are the two that touch things
     // the user already had.
-    await mergeDependencies(projectRoot, plans, options);
+    await mergeDependencies(projectRoot, plans, options, config);
     await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
     log.info("Dry run — nothing was written.");
     return;
@@ -113,7 +113,7 @@ export async function runAdd(
   }
 
   await recordInstalled(projectRoot, atCurrentRef, templateRef());
-  await mergeDependencies(projectRoot, plans, options);
+  await mergeDependencies(projectRoot, plans, options, config);
   await offerThemeTokens(projectRoot, config, resolved, themeLayer, options);
 
   if (written.length > 0 && !options.skipFormat) {
@@ -297,18 +297,32 @@ type PackageJson = {
 } & Record<string, unknown>;
 
 /**
- * Report the external dependencies the added packages need.
+ * Report the external dependencies the added packages need, and offer to install
+ * them.
  *
- * Deliberately does NOT write versions into package.json: the project convention
- * is never to hand-pin, and this CLI has no business inventing a range. Instead
- * it prints the exact install command so the user's package manager resolves
- * current versions.
+ * Deliberately does NOT hand-write version ranges into package.json: the project
+ * convention is never to pin, so the user's package manager resolves them.
+ *
+ * **Where they get installed depends on the shape**, and getting this wrong is a
+ * real bug rather than a nicety. In a monorepo a package must declare what it
+ * imports or the workspace won't resolve it for that package — installing at the
+ * root put `zod` in the ROOT `dependencies` while `packages/auth-custom` still
+ * declared nothing. So a monorepo installs into each package's own directory, and
+ * the manager writes the range where it belongs.
  */
 async function mergeDependencies(
   projectRoot: string,
   plans: PackagePlan[],
-  options: AddOptions
+  options: AddOptions,
+  config: NotilsConfig
 ): Promise<void> {
+  const manager = await detectPackageManager(projectRoot);
+
+  if (config.shape === "monorepo") {
+    await installPerPackage(projectRoot, plans, options, config, manager);
+    return;
+  }
+
   const target = await readJsonFile<PackageJson>(join(projectRoot, "package.json"));
   const present = new Set([
     ...Object.keys(target.dependencies ?? {}),
@@ -330,7 +344,6 @@ async function mergeDependencies(
   }
 
   const list = [...needed].sort();
-  const manager = await detectPackageManager(projectRoot);
   const command = `${manager} add ${list.join(" ")}`;
 
   // This is NOT advisory: the files we just wrote import these, so the project
@@ -378,6 +391,103 @@ async function mergeDependencies(
     progress.stop("Install failed");
     log.message(pc.cyan(`  ${command}`));
     log.message(pc.dim("  Run that yourself to finish the setup."));
+  }
+}
+
+/**
+ * Install each added package's external dependencies **into that package**.
+ *
+ * The generated manifest already declares them at `"*"` (see
+ * `manifestFilesFor`), which is enough for the workspace to resolve — this
+ * upgrades those to real ranges chosen by the user's own package manager, in the
+ * right `package.json`.
+ *
+ * Runs one install per package rather than one at the root: that's what puts the
+ * range on the package that actually imports it.
+ */
+async function installPerPackage(
+  projectRoot: string,
+  plans: PackagePlan[],
+  options: AddOptions,
+  config: NotilsConfig,
+  manager: string
+): Promise<void> {
+  const work: { name: string; directory: string; list: string[] }[] = [];
+
+  for (const plan of plans) {
+    if (plan.externalDependencies.length === 0) {
+      continue;
+    }
+    const relative = `${config.paths.packages}/${plan.pkg.name}`;
+    const manifest = await readJsonFile<PackageJson>(
+      join(projectRoot, relative, "package.json")
+    ).catch(() => null);
+    // Already carrying a real (non-"*") range means a previous run installed it.
+    const needed = plan.externalDependencies.filter((name) => {
+      const range = manifest?.dependencies?.[name] ?? manifest?.devDependencies?.[name];
+      return range === undefined || range === "*";
+    });
+    if (needed.length > 0) {
+      work.push({ name: plan.pkg.name, directory: relative, list: needed.sort() });
+    }
+  }
+
+  if (work.length === 0) {
+    return;
+  }
+
+  const commands = work.map(
+    ({ directory, list }) => `${manager} add ${list.join(" ")}   ${pc.dim(`# in ${directory}`)}`
+  );
+
+  log.warn(
+    `${pc.bold("External dependencies must be installed")} — the code just written imports them, so this project will not compile until they are.`
+  );
+  for (const { name, list } of work) {
+    log.message(pc.dim(`  ${name}: ${list.join(", ")}`));
+  }
+
+  if (options.dryRun) {
+    for (const command of commands) {
+      log.info(pc.dim(`  Would offer to run: ${command}`));
+    }
+    return;
+  }
+
+  const shouldInstall = options.withDeps
+    ? true
+    : process.stdin.isTTY !== true
+      ? false
+      : await confirmInstall(commands.join("\n  "), manager);
+
+  if (!shouldInstall) {
+    for (const command of commands) {
+      log.message(pc.cyan(`  ${command}`));
+    }
+    log.message(
+      pc.dim(
+        options.withDeps === undefined && process.stdin.isTTY !== true
+          ? "  Not prompting without a terminal — run those, or pass --with-deps next time."
+          : "  Run those before building."
+      )
+    );
+    return;
+  }
+
+  const progress = spinner();
+  for (const { name, directory, list } of work) {
+    progress.start(`Installing ${list.length} dependency(s) into ${directory}`);
+    const ok = await tryRunCommand(manager, ["add", ...list], {
+      workingDirectory: join(projectRoot, directory),
+      useShell: process.platform === "win32",
+    });
+    if (ok) {
+      progress.stop(`Installed into ${directory}`);
+    } else {
+      progress.stop(`Could not install into ${directory}`);
+      log.message(pc.cyan(`  cd ${directory} && ${manager} add ${list.join(" ")}`));
+      log.message(pc.dim(`  Run that yourself to finish setting up ${name}.`));
+    }
   }
 }
 

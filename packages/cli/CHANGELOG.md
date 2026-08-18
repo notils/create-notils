@@ -4,6 +4,42 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.1
+
+Fixes for `add` in a **monorepo**, all reported from a real project on 0.6.0.
+Standalone targets were unaffected.
+
+### Fixed
+
+- **A package added to a monorepo now has a working `tsconfig.json`.** It extended
+  a hardcoded `"../../tsconfig.json"` — a file a create-notils monorepo does not
+  have, since its packages extend `@<scope>/config/*` presets instead. That
+  produced `TS5083: Cannot read file '<root>/tsconfig.json'`, and because a broken
+  `extends` inherits **no** compiler options, the package then also failed on
+  `strict`, JSX, and module resolution. The right preset is now detected (React or
+  base, matched to the package), falling back to a *computed* relative path to a
+  real root tsconfig, then to no `extends` at all — never a reference to a file
+  that isn't there.
+
+- **The generated manifest was missing `scripts` and `devDependencies`.** Both
+  matter more than they look: without `@<scope>/config` as a devDependency the
+  `extends` above has no reason to resolve, and **a package with no `typecheck`
+  script is silently skipped by Turborepo** — which is exactly why the broken
+  tsconfig went unnoticed while `turbo run typecheck` reported success.
+
+- **External dependencies are declared on the package that imports them.** They
+  were left out of the generated manifest and installed at the workspace root, so
+  `zod` ended up in the root `dependencies` while `packages/auth-custom` declared
+  nothing — and in a monorepo a package must declare its own imports for the
+  workspace to resolve them. They are written at `"*"` (never this repo's pinned
+  ranges), and the offered install now runs in each package's own directory so your
+  package manager writes a real range in the right file.
+
+- **`add app` asks whether you want a fresh or demo app.** It defaulted to fresh
+  silently, so `--demo` was the only way to discover the option existed. `--yes`
+  and non-interactive runs still take the fresh default, and `--no-demo` is now
+  accepted rather than rejected as an unknown flag.
+
 ## 0.6.0
 
 ### Added

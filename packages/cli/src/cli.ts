@@ -101,14 +101,21 @@ Examples:
   // Instead `add` keeps its variadic argument, and `parseCli` below dispatches on
   // the literal first token being "app". `app` is not a capability name (see
   // INTERNAL_PACKAGES), so there is no ambiguity to resolve.
-  add.option("--demo", "with `add app`: include the example pages and auth flows").addHelpText(
-    "after",
-    `
+  add
+    .option("--demo", "with `add app`: include the example pages and auth flows")
+    // Declared so `--no-demo` is accepted rather than rejected as unknown. It
+    // matches the default, but `create-notils` accepts it and someone scripting
+    // `add app` should be able to state the choice explicitly instead of relying
+    // on a default staying put.
+    .option("--no-demo", "with `add app`: generate a clean app with no example content (default)")
+    .addHelpText(
+      "after",
+      `
 Adding an app:
   $ bunx @notils/cli add app admin
   $ bunx @notils/cli add app console --demo
 `
-  );
+    );
 
   program
     .command("init")

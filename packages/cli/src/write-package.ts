@@ -175,38 +175,100 @@ async function manifestFilesFor(
 
   const fetched = await readJson<{
     type?: string;
+    description?: string;
     exports?: unknown;
+    scripts?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
   }>(join(fetchedRoot, "package.json"));
 
-  // Rebuild rather than copy: same shape, no versions. Internal deps become
-  // `workspace:*` under the project's own scope; external ones are omitted
-  // entirely and reported to the user instead.
+  // Rebuild rather than copy: same shape, no pinned versions of our own. Internal
+  // deps become `workspace:*` under the project's own scope.
   const manifest: Record<string, unknown> = {
     name: `${scope}/${pkg.name}`,
     version: "0.1.0",
     private: true,
     ...(fetched?.type ? { type: fetched.type } : {}),
+    ...(fetched?.description ? { description: fetched.description } : {}),
     ...(fetched?.exports ? { exports: fetched.exports } : {}),
   };
-  if (pkg.dependsOn.length > 0) {
-    manifest.dependencies = Object.fromEntries(
-      [...pkg.dependsOn].sort().map((name) => [`${scope}/${name}`, "workspace:*"])
-    );
+
+  /**
+   * Keep the package's own scripts.
+   *
+   * Not cosmetic: in a Turborepo monorepo, **a package with no `typecheck` script
+   * is silently skipped** by `turbo run typecheck` — so an added package used to
+   * never be typechecked or linted at all, and a genuinely broken one reported
+   * "2 successful, 2 total". That is how the broken `extends` below went unnoticed
+   * until a user opened the file.
+   */
+  if (fetched?.scripts && Object.keys(fetched.scripts).length > 0) {
+    manifest.scripts = fetched.scripts;
   }
+
+  const dependencies: Record<string, string> = Object.fromEntries(
+    [...pkg.dependsOn].sort().map((name) => [`${scope}/${name}`, "workspace:*"])
+  );
+
+  /**
+   * Declare external dependencies too, at `"*"`.
+   *
+   * They were omitted entirely before, which left a workspace package importing
+   * something its own manifest never mentioned (`better-auth`, `zod`, …). The
+   * root-level install `add` offers does not fix that: in a monorepo, a package
+   * must declare what it imports or the workspace won't resolve it for that
+   * package — and `zod` ended up in the ROOT `dependencies`, which is the wrong
+   * place entirely.
+   *
+   * `"*"` rather than the fetched range, because those ranges are THIS monorepo's
+   * pins and must not propagate (the never-hand-pin rule). `"*"` says "this
+   * package needs it, any version the workspace resolves" and lets the user's
+   * install pick — the same reasoning as `normalizeWorkspaceProtocol` in
+   * create-notils.
+   */
+  for (const name of Object.keys(fetched?.dependencies ?? {})) {
+    if (!name.startsWith("@notils/")) {
+      dependencies[name] = "*";
+    }
+  }
+
+  if (Object.keys(dependencies).length > 0) {
+    manifest.dependencies = sortKeys(dependencies);
+  }
+
+  /**
+   * Dev dependencies, re-scoped and de-pinned.
+   *
+   * `@notils/config` → `@<scope>/config` matters most: the generated
+   * `tsconfig.json` extends a preset from that package, and without the dependency
+   * the workspace has no reason to link it, so the `extends` can fail to resolve
+   * even when the file exists. `typescript` and `@types/*` are what make the
+   * package typecheck on its own at all.
+   */
+  const devDependencies: Record<string, string> = {};
+  for (const [name, range] of Object.entries(fetched?.devDependencies ?? {})) {
+    if (name.startsWith("@notils/")) {
+      devDependencies[`${scope}/${name.slice("@notils/".length)}`] = "workspace:*";
+      continue;
+    }
+    devDependencies[name] = range.startsWith("workspace:") ? "workspace:*" : "*";
+  }
+  if (Object.keys(devDependencies).length > 0) {
+    manifest.devDependencies = sortKeys(devDependencies);
+  }
+
   if (fetched?.peerDependencies) {
     // Peer ranges are compatibility statements ("React 19"), not pins we're
-    // choosing — those are meaningful to keep.
+    // choosing — those are meaningful to keep verbatim.
     manifest.peerDependencies = fetched.peerDependencies;
   }
 
   files.push(await planJsonFile(projectRoot, `${directory}/package.json`, manifest));
 
-  // A minimal tsconfig so the package typechecks standalone. Deliberately does
-  // NOT extend a shared preset — a brownfield monorepo has no @notils/config.
   files.push(
     await planJsonFile(projectRoot, `${directory}/tsconfig.json`, {
-      extends: "../../tsconfig.json",
+      extends: await resolveTsconfigExtends(projectRoot, pkg, config, scope),
       compilerOptions: { paths: { [`${scope}/${pkg.name}/*`]: ["./src/*"] } },
       include: ["src"],
       exclude: ["node_modules"],
@@ -214,6 +276,71 @@ async function manifestFilesFor(
   );
 
   return files;
+}
+
+function sortKeys(record: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Presets a create-notils monorepo's config package provides. */
+const REACT_PRESET = "tsconfig.react.json";
+const BASE_PRESET = "tsconfig.base.json";
+
+/**
+ * What the generated package's `tsconfig.json` should extend.
+ *
+ * This used to be a hardcoded `"../../tsconfig.json"`, which was wrong twice
+ * over: a create-notils monorepo has **no root tsconfig.json** at all (packages
+ * extend `@<scope>/config/*` instead), and the `../../` depth silently assumes
+ * `paths.packages` is exactly one level deep. The result was `TS5083: Cannot read
+ * file '<root>/tsconfig.json'` — and because a broken `extends` means the package
+ * inherits NO compiler options, it then failed on `strict`, JSX, and module
+ * resolution too. Reported from a real project.
+ *
+ * So detect instead of assume, preferring what the project already does:
+ *
+ *  1. a `config` package under `paths.packages` exposing the presets — extend the
+ *     same one the scaffold's own packages use, matched to whether this package
+ *     needs React types;
+ *  2. otherwise a root `tsconfig.json`, if one genuinely exists — the shape a
+ *     brownfield monorepo usually has, reached by a computed relative path rather
+ *     than a fixed `../../`;
+ *  3. otherwise no `extends` at all. A tsconfig extending a file that isn't there
+ *     is strictly worse than a standalone one: it inherits nothing AND errors.
+ */
+async function resolveTsconfigExtends(
+  projectRoot: string,
+  pkg: InternalPackage,
+  config: NotilsConfig,
+  scope: string
+): Promise<string | undefined> {
+  // `ui`, `auth-ui`, and `form-builder` ship .tsx and need the React preset; the
+  // rest are plain TypeScript. Derived from the package's own fold behavior rather
+  // than a second hardcoded list: `spread` is the ui kit, and a package that
+  // peer-depends on React needs React types.
+  const needsReact = pkg.fold.kind === "spread" || pkg.dependsOn.includes("ui");
+  const preset = needsReact ? REACT_PRESET : BASE_PRESET;
+
+  const configDirectory = join(projectRoot, config.paths.packages, "config");
+  if (await pathExists(join(configDirectory, preset))) {
+    return `${scope}/config/${preset}`;
+  }
+  // The config package exists but not that exact preset — fall back to whichever
+  // it does have rather than naming a missing file.
+  for (const candidate of [REACT_PRESET, BASE_PRESET]) {
+    if (await pathExists(join(configDirectory, candidate))) {
+      return `${scope}/config/${candidate}`;
+    }
+  }
+
+  if (await pathExists(join(projectRoot, "tsconfig.json"))) {
+    // Computed, not hardcoded: `paths.packages` may be nested (`libs/internal`),
+    // and POSIX separators because tsconfig paths are not platform-specific.
+    const depth = `${config.paths.packages}/${pkg.name}`.split("/").filter(Boolean).length;
+    return `${"../".repeat(depth)}tsconfig.json`;
+  }
+
+  return undefined;
 }
 
 async function readJson<T>(filePath: string): Promise<T | null> {
