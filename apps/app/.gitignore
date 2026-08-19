@@ -30,8 +30,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Environment files with real values.
+#
+# `.env.example` is the deliberate exception: it is the committed reference list
+# of every variable this project reads, with no real values in it. Everything else
+# stays local. Next.js's own default here is a bare `.env*`, which also swallows
+# the example file — and in a standalone scaffold this file becomes the project
+# root's .gitignore, so that omission left the one env file that SHOULD be tracked
+# silently untracked.
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel

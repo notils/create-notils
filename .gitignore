@@ -5,13 +5,6 @@ node_modules
 .pnp
 .pnp.js
 
-# Local env files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
 # Testing
 coverage
 
@@ -47,3 +40,8 @@ yarn-error.log*
 # represent junctions, so it would double-track the files. Ignore the mirror;
 # the installer/junctions regenerate it locally.
 .claude/skills/
+
+# Environment files with real values.
+.env
+.env.*
+!.env.example

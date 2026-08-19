@@ -115,6 +115,11 @@ Not every project needs staging on day one.
 | `dev-prod` | `.env.development`, `.env.production`, `.env.example` |
 | `dev-staging-prod` | adds `.env.staging` |
 
+**`.env.example` is the only committed env file** — the reference list of every
+variable, with no real values. Everything else is gitignored, so a file with a
+real secret in it cannot be committed by accident. Deployments set their variables
+through the host's environment or secret store, not a file in the repo.
+
 Resolution is centralized in one module — `packages/config/env.ts` in a monorepo,
 `src/env.ts` standalone — so no application reimplements "which environment am I
 in":

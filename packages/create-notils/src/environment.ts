@@ -1,10 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   type EnvironmentSetup,
   environmentFiles,
-  environmentGitignoreLines,
   environmentModuleContents,
 } from "@notils/transform/environments";
 
@@ -61,7 +59,10 @@ export async function configureEnvironments(
   );
   written.push(modulePath.split("\\").join("/"));
 
-  await appendGitignoreLines(projectRoot, setup);
+  // No `.gitignore` step: the template's own blanket `.env` / `.env.*` /
+  // `!.env.example` rule already covers every file written above, whatever the
+  // setup. The earlier enumerate-and-append approach could miss a file the list
+  // didn't anticipate — `.env.staging.local` was exactly that gap.
 
   return { written, modulePath: modulePath.split("\\").join("/") };
 }
@@ -76,34 +77,4 @@ export async function configureEnvironments(
 function importHint(projectType: "monorepo" | "standalone", scope: string | null): string {
   const specifier = projectType === "monorepo" ? `${scope ?? "@your-scope"}/config/env` : "@/env";
   return `// Import as: import { environment, isProduction } from "${specifier}";\n\n`;
-}
-
-/**
- * Add the env-file ignores to the root `.gitignore`.
- *
- * Appends rather than rewrites, and skips lines already present — the template
- * ships a `.gitignore` we don't own line-for-line, and duplicating entries in it
- * would be sloppy even though git tolerates it.
- */
-async function appendGitignoreLines(projectRoot: string, setup: EnvironmentSetup): Promise<void> {
-  const gitignorePath = join(projectRoot, ".gitignore");
-  let existing = "";
-  try {
-    existing = await readFile(gitignorePath, "utf8");
-  } catch {
-    // No root .gitignore (standalone promotes the app's later) — create one.
-  }
-
-  const existingLines = new Set(existing.split(/\r?\n/).map((line) => line.trim()));
-  const toAdd = environmentGitignoreLines(setup).filter(
-    (line) => line === "" || line.startsWith("#") || !existingLines.has(line)
-  );
-
-  // Nothing but the comment header left to add means every ignore is already there.
-  if (!toAdd.some((line) => line !== "" && !line.startsWith("#"))) {
-    return;
-  }
-
-  const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
-  await writeTextFile(gitignorePath, `${existing}${separator}${toAdd.join("\n")}\n`);
 }

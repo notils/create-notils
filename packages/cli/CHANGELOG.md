@@ -4,6 +4,15 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.3
+
+### Changed
+
+- Fetches template source from `v0.6.2`, which carries the `.gitignore` fix for
+  `.env` files (see [create-notils 0.6.2](../create-notils/CHANGELOG.md)). No
+  behavior change in this CLI itself — the template ref is inlined at build time,
+  so picking up a new template requires a release.
+
 ## 0.6.2
 
 ### Fixed

@@ -4,6 +4,38 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.2
+
+### Fixed
+
+- **`.env` files are now reliably gitignored.** The template enumerated the files
+  to ignore (`.env`, `.env.local`, `.env.development.local`, …), so anything the
+  list didn't anticipate shipped **unignored** — `.env.staging.local` was exactly
+  that gap. Replaced with a blanket rule that cannot have one:
+
+  ```gitignore
+  .env
+  .env.*
+  !.env.example
+  ```
+
+- **`.env.example` was itself gitignored in a standalone project.** Next.js's
+  default app `.gitignore` uses a bare `.env*`, which swallows the example file
+  too — and in a standalone scaffold that file becomes the project root's
+  `.gitignore`. So the one env file that *should* be tracked silently wasn't.
+
+### Changed
+
+- **`.env.example` is now the only committed env file.** Previously the
+  per-environment files (`.env.development`, `.env.staging`, `.env.production`)
+  were generated as committed non-secret defaults; they are now local-only, like
+  every other `.env*` file. `.env.example` remains the committed reference list of
+  every variable the project reads, and deployments set their values through the
+  host's environment or secret store rather than a file in the repo.
+
+  This is the safer default: no `.env*` file can be committed by accident, and
+  there is no per-file judgement call about whether a given value counts as secret.
+
 ## 0.6.1
 
 ### Fixed

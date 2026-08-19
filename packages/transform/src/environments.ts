@@ -89,8 +89,12 @@ NEXT_PUBLIC_APP_NAME="${options.projectName}"
   for (const name of environmentNames(setup)) {
     files.push({
       path: `.env.${name}`,
-      contents: `# Committed, NON-SECRET defaults for the ${name} environment.
-# Put secrets in .env.${name}.local (gitignored) or your host's secret store.
+      contents: `# Local values for the ${name} environment. GITIGNORED — this file is
+# yours, not the repository's. \`.env.example\` is the single committed
+# reference for which variables exist.
+#
+# For deployments, set these in your host's environment or secret store
+# rather than shipping a file.
 
 APP_ENV="${name}"
 NEXT_PUBLIC_APP_NAME="${options.projectName}"
@@ -125,8 +129,9 @@ function exampleFileContents(
   projectName: string,
   hasBetterAuth: boolean
 ): string {
-  const header = `# Every variable this project reads. Committed as documentation — no real
-# values here. Copy to ${setup === "single" ? ".env.local" : ".env.<environment>.local"} and fill them in.
+  const header = `# Every variable this project reads. THE ONLY COMMITTED ENV FILE — documentation
+# only, no real values. Copy to ${setup === "single" ? ".env.local" : ".env.<environment>"} and fill them in there;
+# every other .env* file is gitignored.
 `;
 
   const appEnv =
@@ -219,24 +224,26 @@ ${guards}
 }
 
 /**
- * The `.gitignore` lines a setup needs, beyond whatever the template already has.
+ * Environment files are gitignored by the template's own `.gitignore`, which uses
+ * a blanket rule with one negation:
  *
- * The committed-vs-ignored split is the point: `.env.example` and the per-env
- * `.env.<name>` files hold non-secret defaults and SHOULD be committed, while
- * `.env.local` and `.env.<name>.local` hold real secrets and must not be.
+ * ```
+ * .env
+ * .env.*
+ * !.env.example
+ * ```
+ *
+ * There is deliberately no per-setup gitignore step here any more. An earlier
+ * version enumerated the files to ignore (`.env.local`, `.env.<name>.local`, …)
+ * and appended them at scaffold time — which meant a setup that generated a file
+ * the list didn't anticipate shipped it unignored. `.env.staging.local` was exactly
+ * that case. A blanket rule cannot have that gap, and it needs no scaffold-time
+ * patching, so the whole step is gone.
+ *
+ * The consequence, reflected in `environmentFiles` above: **`.env.example` is the
+ * only committed env file.** Per-environment files are local-only, and deployments
+ * set their variables through the host rather than a committed file.
  */
-export function environmentGitignoreLines(setup: EnvironmentSetup): string[] {
-  const lines = [
-    "",
-    "# Environment files with real values. The committed ones (.env.example and",
-    "# any .env.<environment>) hold non-secret defaults only.",
-    ".env.local",
-  ];
-  for (const name of environmentNames(setup)) {
-    lines.push(`.env.${name}.local`);
-  }
-  return lines;
-}
 
 /** Parse an `--env` flag value. Returns null when it isn't a supported setup. */
 export function parseEnvironmentSetup(value: string): EnvironmentSetup | null {

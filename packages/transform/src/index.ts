@@ -12,7 +12,6 @@ export {
   type EnvironmentFile,
   type EnvironmentSetup,
   environmentFiles,
-  environmentGitignoreLines,
   environmentModuleContents,
   environmentNames,
   parseEnvironmentSetup,

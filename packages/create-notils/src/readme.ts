@@ -50,8 +50,9 @@ import { environment, isProduction } from "${importSpecifier}";
   if (setup === "single") {
     return `## Environments
 
-One environment, configured in \`.env.local\` (gitignored). \`.env.example\` is the
-committed list of every variable this project reads.
+One environment, configured in \`.env.local\`. \`.env.example\` is **the only
+committed env file** — the reference list of every variable this project reads,
+with no real values; every other \`.env*\` file is gitignored.
 
 ${usage}
 
@@ -61,15 +62,17 @@ imports \`environment\` needs to change.`;
   }
 
   const names = environmentNames(setup);
-  const fileList = names.map((name) => `- \`.env.${name}\` — committed, non-secret defaults`);
+  const fileList = names.map((name) => `- \`.env.${name}\` — your local values for ${name}`);
 
   return `## Environments
 
+- \`.env.example\` — **the only committed env file.** The reference list of every
+  variable this project reads, with no real values.
 ${fileList.join("\n")}
-- \`.env.example\` — the committed list of every variable this project reads
 
-Real secrets go in \`.env.<environment>.local\` (gitignored) or your host's secret
-store — never in the committed files above.
+Every \`.env*\` file except \`.env.example\` is gitignored, so nothing with a real
+value is ever committed. For deployments, set variables in your host's environment
+or secret store rather than shipping a file.
 
 Select the environment with \`APP_ENV\`:
 
