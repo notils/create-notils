@@ -4,6 +4,20 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.4
+
+### Changed
+
+- Dependency maintenance across the template's packages: Next.js, React,
+  Zod, Better Auth, `@base-ui/react`, `lucide-react`, `shadcn`,
+  `react-hook-form`, `@hookform/resolvers`, and `@types/*`, all bumped to
+  latest within their existing major (TypeScript stays on 6.x — 7.x is not
+  yet compatible with this template's Next.js version). `add` fetches package
+  source from the template tag at run time, so this release exists to move
+  that tag forward; nothing in the CLI's own logic changed.
+- Raised the minimum Node version to run this CLI from 20 to 24 — the current
+  Active LTS line. 18 and 20 are both past their support window.
+
 ## 0.6.3
 
 ### Changed

@@ -1,6 +1,6 @@
 {
   "name": "create-notils",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Scaffold a production-ready Next.js project (Turborepo + Bun + Tailwind v4 + shadcn/ui on Base UI + Biome) as a monorepo or a standalone app, in one command.",
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "publishConfig": {
     "access": "public"
