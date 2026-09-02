@@ -25,12 +25,12 @@
     "@notils/auth-core": "workspace:*",
     "@notils/form-builder": "workspace:*",
     "@notils/ui": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.17",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
     "typescript": "^6.0.3"
   }
 }
