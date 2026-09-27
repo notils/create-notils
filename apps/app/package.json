@@ -19,18 +19,18 @@
     "@notils/auth-ui": "workspace:*",
     "@notils/form-builder": "workspace:*",
     "@notils/ui": "workspace:*",
-    "better-auth": "^1.6.26",
-    "next": "16.3.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "zod": "^4.5.4"
+    "better-auth": "^1.7.6",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "babel-plugin-react-compiler": "1.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"

@@ -19,18 +19,18 @@
     "format": "biome format --write ."
   },
   "peerDependencies": {
-    "react": "^19.0.0"
+    "react": "^19.3.0"
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@notils/ui": "workspace:*",
-    "react-hook-form": "^7.87.0",
-    "zod": "^4.5.4"
+    "react-hook-form": "^7.89.0",
+    "zod": "^4.6.5"
   }
 }

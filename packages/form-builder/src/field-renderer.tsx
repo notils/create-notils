@@ -10,6 +10,7 @@ import {
   FieldLabel,
 } from "@notils/ui/components/ui/field";
 import { Input } from "@notils/ui/components/ui/input";
+import { PasswordInput } from "@notils/ui/components/ui/password-input";
 import {
   Select,
   SelectContent,
@@ -45,8 +46,15 @@ export function renderPrimitiveField<TFieldValues extends FieldValues>(
         <Field data-invalid={!!fieldState.error} orientation="vertical">
           <FieldContent>
             <FieldLabel htmlFor={descriptor.path}>
-              {descriptor.label}
-              {!descriptor.optional && <span aria-hidden="true"> *</span>}
+              <span>
+                {descriptor.label}
+                {!descriptor.optional && (
+                  <span aria-hidden="true" className="text-destructive">
+                    {" "}
+                    *
+                  </span>
+                )}
+              </span>
             </FieldLabel>
             {renderControl(descriptor, field, className)}
             {descriptor.description && (
@@ -127,9 +135,8 @@ function renderControl(
       );
     case "password":
       return (
-        <Input
+        <PasswordInput
           id={descriptor.path}
-          type="password"
           value={(field.value as string | undefined) ?? ""}
           onChange={(e) => field.onChange(e.target.value)}
           onBlur={field.onBlur}

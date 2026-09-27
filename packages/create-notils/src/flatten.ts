@@ -239,7 +239,7 @@ async function mergePackageJson(
     ...withoutWorkspaceDeps(app.devDependencies),
     // Biome and husky are provided by the monorepo root; a standalone project
     // needs them directly.
-    "@biomejs/biome": "^2.5.11",
+    "@biomejs/biome": "^2.5.14",
     husky: "^9.1.7",
   });
 

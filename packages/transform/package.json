@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@notils/config": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.3",
     "typescript": "^6.0.3"
   }
 }

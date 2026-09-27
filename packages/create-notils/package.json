@@ -50,7 +50,7 @@
   "devDependencies": {
     "@notils/config": "workspace:*",
     "@notils/transform": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3"
   }

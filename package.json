@@ -13,10 +13,10 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.11",
+    "@biomejs/biome": "^2.5.14",
     "@notils/config": "workspace:*",
     "husky": "^9.1.7",
-    "turbo": "^2.10.12",
+    "turbo": "^2.11.4",
     "typescript": "^6.0.3"
   },
   "engines": {
