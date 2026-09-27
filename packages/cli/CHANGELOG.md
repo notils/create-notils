@@ -4,6 +4,28 @@ All notable changes to `@notils/cli` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.7.0
+
+### Added
+
+- **`add form-builder` / `add auth-ui` now scaffold a password field with a
+  show/hide toggle** — a new `PasswordInput` in `@notils/ui`, wired into the
+  form-builder's password case. Fetched from the template like any other
+  package content; no CLI flag or behavior change.
+
+### Fixed
+
+- The required-field asterisk in scaffolded forms no longer sits a visible
+  gap away from its label.
+
+### Changed
+
+- Further dependency maintenance in the template's packages (Next.js, React,
+  Zod, Better Auth, `@base-ui/react`, `lucide-react`, `shadcn`,
+  `react-hook-form`, `@hookform/resolvers`, `@types/*`). `add` fetches package
+  source from the template tag at run time, so this release exists to move
+  that tag forward; nothing in the CLI's own logic changed.
+
 ## 0.6.4
 
 ### Changed

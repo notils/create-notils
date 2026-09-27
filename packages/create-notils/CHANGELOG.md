@@ -4,6 +4,29 @@ All notable changes to `create-notils` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.7.0
+
+### Added
+
+- **Password fields now render with a show/hide toggle.** `SignInForm`,
+  `SignUpForm`, and any other schema-driven form with a password field get an
+  eye-icon button inside the input, backed by a new `PasswordInput` in
+  `@notils/ui`. No schema or prop changes — every existing password field
+  picks this up automatically.
+
+### Fixed
+
+- The required-field asterisk no longer sits a visible gap away from its
+  label (`Field`'s flex `gap-2` was spacing it like a second element). It now
+  sits tight against the label text, styled `text-destructive`.
+
+### Changed
+
+- Further dependency maintenance: Next.js, React, Zod, Better Auth,
+  `@base-ui/react`, `lucide-react`, `shadcn`, `react-hook-form`,
+  `@hookform/resolvers`, and `@types/*`, all bumped to latest within their
+  existing major.
+
 ## 0.6.3
 
 ### Changed
